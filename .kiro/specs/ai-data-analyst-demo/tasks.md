@@ -51,7 +51,7 @@
 
 ## File Handling
 
-- [-] 7. File upload API and validation
+- [x] 7. File upload API and validation
   - Create POST /api/files/upload route with Node runtime
   - Add CSV validation: ≤50MB, .csv extension, delimiter/encoding detection, row estimation
   - Implement PII heuristics: column-name + regex sample scan, record pii_flags
@@ -59,7 +59,7 @@
   - **DoD:** Returns {fileId, filename, size, rowCount, profileHints}, rejects non-CSV with clear message
   - _Requirements: 1.1, 1.2, 1.3, 1.6, 1.7, 1.8_
 
-- [ ] 8. File uploader UI component
+- [-] 8. File uploader UI component
   - Build drag & drop interface with progress indication
   - Add error toasts using MUI Alert components
   - Post system chat message "File received: ..." on success

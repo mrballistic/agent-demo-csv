@@ -22,7 +22,36 @@ export interface FileUploadResult {
   filename: string;
   size: number;
   rowCount: number;
-  profile: DataProfile;
+  profileHints: {
+    columnCount: number;
+    hasHeaders: boolean;
+    sampleData: string[][];
+  };
+}
+
+export interface PIIFlags {
+  [columnName: string]: {
+    isPII: boolean;
+    confidence: number;
+    type: 'email' | 'phone' | 'name' | 'address' | 'other';
+  };
+}
+
+export interface FileMetadata {
+  fileId: string;
+  filename: string;
+  size: number;
+  checksum: string;
+  encoding: string;
+  delimiter: string;
+  rowCount: number;
+  sniffRows: number;
+  piiFlags: PIIFlags;
+  profileHints: {
+    columnCount: number;
+    hasHeaders: boolean;
+    sampleData: string[][];
+  };
 }
 
 export interface DataProfile {
