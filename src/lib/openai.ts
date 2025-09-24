@@ -6,10 +6,10 @@ export const openai = new OpenAI({
 });
 
 // Assistant configuration with system prompt
-export const ASSISTANT_CONFIG = {
+export const ASSISTANT_CONFIG: OpenAI.Beta.Assistants.AssistantCreateParams = {
   name: 'Analyst-in-a-Box',
   model: 'gpt-4o',
-  tools: [{ type: 'code_interpreter' as const }],
+  tools: [{ type: 'code_interpreter' }],
   temperature: 0.2,
   instructions: `You are "Analyst-in-a-Box", a careful data analyst.
 
@@ -161,7 +161,7 @@ export class AssistantManager {
         );
       }
 
-      const runParams: OpenAI.Beta.Threads.Runs.RunCreateParams = {
+      const runParams: any = {
         assistant_id: runAssistantId,
         max_prompt_tokens: 1000,
         max_completion_tokens: 1000,
@@ -322,6 +322,10 @@ export function extractManifest(
     // Try to parse the last line as JSON manifest
     const lines = textContent.trim().split(/\r?\n/);
     const lastLine = lines[lines.length - 1];
+
+    if (!lastLine) {
+      throw new Error('No content to parse');
+    }
 
     // Try to parse as JSON
     const parsed = JSON.parse(lastLine);

@@ -59,7 +59,7 @@
   - **DoD:** Returns {fileId, filename, size, rowCount, profileHints}, rejects non-CSV with clear message
   - _Requirements: 1.1, 1.2, 1.3, 1.6, 1.7, 1.8_
 
-- [-] 8. File uploader UI component
+- [x] 8. File uploader UI component
   - Build drag & drop interface with progress indication
   - Add error toasts using MUI Alert components
   - Post system chat message "File received: ..." on success

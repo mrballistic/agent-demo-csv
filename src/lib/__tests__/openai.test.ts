@@ -362,7 +362,7 @@ describe('extractManifest', () => {
       },
     ];
 
-    const result = extractManifest(messages);
+    const result = extractManifest(messages as any);
 
     expect(result).toEqual({
       insight: 'Revenue trends show growth',
@@ -388,7 +388,7 @@ describe('extractManifest', () => {
       },
     ];
 
-    const result = extractManifest(messages);
+    const result = extractManifest(messages as any);
 
     expect(result).toEqual({
       insight: 'Revenue trends show growth',
@@ -414,7 +414,7 @@ describe('extractManifest', () => {
       },
     ];
 
-    const result = extractManifest(messages);
+    const result = extractManifest(messages as any);
 
     expect(result).toEqual({
       insight: 'Analysis complete.',
@@ -441,7 +441,7 @@ describe('extractManifest', () => {
       },
     ];
 
-    const result = extractManifest(messages);
+    const result = extractManifest(messages as any);
 
     expect(result).toBeNull();
   });
@@ -455,7 +455,7 @@ describe('extractManifest', () => {
       },
     ];
 
-    const result = extractManifest(messages);
+    const result = extractManifest(messages as any);
 
     expect(result).toBeNull();
   });

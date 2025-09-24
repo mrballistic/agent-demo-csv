@@ -62,7 +62,7 @@ const PII_COLUMN_NAMES = {
   ],
 };
 
-function detectEncoding(buffer: Buffer): string {
+function detectEncoding(buffer: Buffer): BufferEncoding {
   // Simple encoding detection - check for BOM and common patterns
   if (
     buffer.length >= 3 &&
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
     const columns = sampleData.length > 0 ? sampleData[0] : [];
 
     // Detect PII
-    const piiFlags = detectPII(columns, sampleData);
+    const piiFlags = detectPII(columns || [], sampleData);
 
     const metadata: FileMetadata = {
       fileId,
@@ -256,8 +256,8 @@ export async function POST(request: NextRequest) {
       sniffRows,
       piiFlags,
       profileHints: {
-        columnCount: columns.length,
-        hasHeaders: columns.length > 0,
+        columnCount: columns?.length || 0,
+        hasHeaders: (columns?.length || 0) > 0,
         sampleData: sampleData.slice(0, Math.min(3, sampleData.length)), // First 3 rows including header
       },
     };
