@@ -4,6 +4,8 @@ const nextConfig = {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     APP_URL: process.env.APP_URL,
     LOG_LEVEL: process.env.LOG_LEVEL,
+    BUILD_SHA: process.env.BUILD_SHA,
+    BUILD_TIME: process.env.BUILD_TIME,
   },
   async headers() {
     return [
@@ -26,6 +28,18 @@ const nextConfig = {
           {
             key: 'X-XSS-Protection',
             value: '1; mode=block',
+          },
+          {
+            key: 'Cross-Origin-Resource-Policy',
+            value: 'cross-origin',
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'unsafe-none',
+          },
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
           },
         ],
       },

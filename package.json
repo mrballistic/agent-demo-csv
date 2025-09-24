@@ -11,6 +11,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
     "prepare": "husky install"
   },
   "dependencies": {
@@ -19,6 +22,7 @@
     "@mui/icons-material": "^5.15.0",
     "@mui/material": "^5.15.0",
     "next": "^14.2.33",
+    "next-rate-limit": "^0.0.3",
     "openai": "^4.20.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -30,6 +34,7 @@
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
+    "@vitest/ui": "^3.2.4",
     "eslint": "^8.55.0",
     "eslint-config-next": "14.0.4",
     "eslint-config-prettier": "^9.1.0",
@@ -37,7 +42,9 @@
     "husky": "^8.0.3",
     "lint-staged": "^15.2.0",
     "prettier": "^3.1.0",
-    "typescript": "^5.3.2"
+    "tsx": "^4.20.5",
+    "typescript": "^5.3.2",
+    "vitest": "^3.2.4"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

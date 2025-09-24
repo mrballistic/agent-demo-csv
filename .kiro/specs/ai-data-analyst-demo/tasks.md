@@ -2,7 +2,7 @@
 
 ## Foundation & Guardrails
 
-- [-] 1. Environment setup and security configuration
+- [x] 1. Environment setup and security configuration
   - Set up environment variables: OPENAI_API_KEY, APP_URL, NODE_OPTIONS, LOG_LEVEL
   - Configure TypeScript strict mode, ESLint + Prettier, Zod for API validation
   - Add Husky pre-commit hooks for code quality
@@ -10,7 +10,7 @@
   - **DoD:** Environment loads correctly, linting passes, TypeScript strict mode enabled, .kiro specs committed to git
   - _Requirements: 8.1, 8.2, 8.5_
 
-- [ ] 2. Security headers and API protection
+- [x] 2. Security headers and API protection
   - Implement Content Security Policy, CORP/COEP headers
   - Add CORS configuration and rate limiting on /api/\* routes
   - Create /api/healthz endpoint returning build SHA
@@ -19,21 +19,21 @@
 
 ## Core Application Structure
 
-- [ ] 3. Next.js foundation with MUI integration
+- [x] 3. Next.js foundation with MUI integration
   - Create Next.js 14 app with App Router and TypeScript
   - Install MUI, icons, Emotion, and OpenAI SDK
   - Set up basic project structure with components and lib directories
   - **DoD:** App boots without errors, dependencies installed correctly
   - _Requirements: 8.5_
 
-- [ ] 4. MUI layout scaffold and theme system
+- [x] 4. MUI layout scaffold and theme system
   - Implement AnalystMuiScaffold component with responsive layout
   - Add ThemeToggle with dark/light/system mode (localStorage + prefers-color-scheme)
   - Create AppBar, chat pane, artifacts drawer with proper responsive behavior
   - **DoD:** App renders with complete layout, theme switching works, no hydration flash
   - _Requirements: 5.1, 5.2, 8.5_
 
-- [ ] 5. Session and storage management (in-memory)
+- [x] 5. Session and storage management (in-memory)
   - Implement SessionStore with rolling 24h TTL: { id, threadId, ttlExpiresAt, lastActivity, metrics }
   - Create FileStore for temporary artifacts with checksums and 24h retention
   - Add automatic TTL sweeper for expired sessions and files
@@ -42,7 +42,7 @@
 
 ## OpenAI Integration
 
-- [ ] 6. OpenAI integration layer
+- [x] 6. OpenAI integration layer
   - Create AssistantManager: createAssistant(), createThread(), createMessage(), createRun(), streamRun(), cancelRun()
   - Configure assistant with tools:[{type:'code_interpreter'}], temperature:0.2, system prompt
   - Implement manifest extractor parsing last line JSON with fallback to message content
@@ -51,7 +51,7 @@
 
 ## File Handling
 
-- [ ] 7. File upload API and validation
+- [-] 7. File upload API and validation
   - Create POST /api/files/upload route with Node runtime
   - Add CSV validation: ≤50MB, .csv extension, delimiter/encoding detection, row estimation
   - Implement PII heuristics: column-name + regex sample scan, record pii_flags
