@@ -84,7 +84,7 @@
   - **DoD:** Streaming deltas render smoothly, completed messages pinned, focus management works
   - _Requirements: 5.1, 5.2, 5.4_
 
-- [-] 11. Analysis suggestions and quick actions
+- [x] 11. Analysis suggestions and quick actions
   - Create GET /api/analysis/suggestions?fileId endpoint
   - Build QuickActions component with preset analysis buttons
   - Gray out suggestions when required columns missing
@@ -92,7 +92,7 @@
   - **DoD:** 3-5 suggestions appear, actions trigger runs, missing columns handled
   - _Requirements: 2.1, 2.2, 2.3, 5.4_
 
-- [ ] 12. Run execution with progress tracking
+- [-] 12. Run execution with progress tracking
   - Implement POST /api/analysis/query route (creates message and run)
   - Add budget enforcement: 90s hard timeout, 15s goal for ≤100k rows
   - Forward SSE events to UI with status chips
