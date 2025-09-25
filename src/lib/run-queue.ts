@@ -74,6 +74,17 @@ export class RunQueue {
   } {
     // Check if queue is at capacity
     if (this.queue.length >= this.maxQueueDepth) {
+      // Track queue rejection
+      import('./telemetry').then(({ Telemetry }) => {
+        Telemetry.trackQueueEvent(
+          'enqueued',
+          this.queue.length,
+          undefined,
+          run.sessionId,
+          'rejected_capacity'
+        );
+      });
+
       return {
         runId: '',
         accepted: false,
@@ -83,7 +94,7 @@ export class RunQueue {
 
     const queuedRun: QueuedRun = {
       ...run,
-      id: `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `run_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       queuedAt: Date.now(),
       status: 'queued',
       retryCount: 0,
@@ -91,6 +102,17 @@ export class RunQueue {
     };
 
     this.queue.push(queuedRun);
+
+    // Track queue enqueue event
+    import('./telemetry').then(({ Telemetry }) => {
+      Telemetry.trackQueueEvent(
+        'enqueued',
+        this.queue.length,
+        this.estimateWaitTime(),
+        run.sessionId,
+        queuedRun.id
+      );
+    });
 
     return {
       runId: queuedRun.id,
@@ -105,7 +127,7 @@ export class RunQueue {
    */
   getCurrentRun(threadId: string): QueuedRun | null {
     // Check running runs first
-    for (const run of this.running.values()) {
+    for (const run of Array.from(this.running.values())) {
       if (run.threadId === threadId) {
         return run;
       }
@@ -155,6 +177,13 @@ export class RunQueue {
       run.openaiRunId = openaiRunId;
       run.startedAt = Date.now();
       run.status = 'running';
+
+      // Track run started event
+      import('./telemetry').then(({ Telemetry }) => {
+        Telemetry.trackRunEvent('started', runId, run.sessionId, run.threadId, {
+          analysisType: run.query,
+        });
+      });
       return;
     }
 
@@ -167,6 +196,27 @@ export class RunQueue {
         queuedRun.startedAt = Date.now();
         queuedRun.status = 'running';
         this.running.set(runId, queuedRun);
+
+        // Track queue dequeue and run started events
+        import('./telemetry').then(({ Telemetry }) => {
+          const waitTime = queuedRun.startedAt! - queuedRun.queuedAt;
+          Telemetry.trackQueueEvent(
+            'dequeued',
+            queueIndex + 1,
+            waitTime,
+            queuedRun.sessionId,
+            runId
+          );
+          Telemetry.trackRunEvent(
+            'started',
+            runId,
+            queuedRun.sessionId,
+            queuedRun.threadId,
+            {
+              analysisType: queuedRun.query,
+            }
+          );
+        });
       }
     }
   }
@@ -183,6 +233,23 @@ export class RunQueue {
         run.error = error;
       }
 
+      const durationMs = run.startedAt ? run.completedAt - run.startedAt : 0;
+
+      // Track run completion event
+      import('./telemetry').then(({ Telemetry }) => {
+        Telemetry.trackRunEvent(
+          success ? 'completed' : 'failed',
+          runId,
+          run.sessionId,
+          run.threadId,
+          {
+            analysisType: run.query,
+            durationMs,
+            ...(error && { errorClass: error }),
+          }
+        );
+      });
+
       this.running.delete(runId);
       this.completed.push(run);
 
@@ -195,6 +262,17 @@ export class RunQueue {
         delete run.completedAt;
         delete run.openaiRunId;
         this.queue.unshift(run); // Add to front for retry
+
+        // Track retry event
+        import('./telemetry').then(({ Telemetry }) => {
+          Telemetry.trackQueueEvent(
+            'enqueued',
+            1, // Front of queue
+            undefined,
+            run.sessionId,
+            runId
+          );
+        });
       }
     }
   }
@@ -205,7 +283,7 @@ export class RunQueue {
   getStats(): QueueStats {
     const allRuns = [
       ...this.queue,
-      ...this.running.values(),
+      ...Array.from(this.running.values()),
       ...this.completed,
     ];
 

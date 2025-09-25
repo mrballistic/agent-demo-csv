@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -31,6 +31,12 @@ import {
   SelectAll,
   Clear,
 } from '@mui/icons-material';
+import {
+  KeyboardNavigation,
+  generateChartAltText,
+  announceToScreenReader,
+  srOnlyStyles,
+} from '@/lib/accessibility';
 
 export interface ArtifactItem {
   id: string;
@@ -40,6 +46,14 @@ export interface ArtifactItem {
   downloadUrl: string;
   createdAt?: number;
   mimeType?: string;
+  altText?: string;
+  manifest?: {
+    insight?: string;
+    metadata?: {
+      analysis_type?: string;
+      columns_used?: string[];
+    };
+  };
 }
 
 interface ArtifactsPanelProps {
@@ -63,20 +77,29 @@ export function ArtifactsPanel({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const handleDownload = async (artifactId: string) => {
     try {
+      const artifact = artifacts.find(a => a.id === artifactId);
       if (onDownload) {
         onDownload(artifactId);
       } else {
         // Default download behavior
-        const artifact = artifacts.find(a => a.id === artifactId);
         if (artifact) {
           window.open(artifact.downloadUrl, '_blank');
         }
       }
+
+      // Announce download to screen readers
+      if (artifact) {
+        announceToScreenReader(`Downloading ${artifact.name}`, 'polite');
+      }
     } catch (error) {
       console.error('Download failed:', error);
+      announceToScreenReader('Download failed', 'assertive');
     }
   };
 
@@ -87,6 +110,7 @@ export function ArtifactsPanel({
 
     setIsExporting(true);
     setExportError(null);
+    announceToScreenReader('Starting export...', 'polite');
 
     try {
       const artifactIds = Array.from(selectedArtifacts);
@@ -120,9 +144,13 @@ export function ArtifactsPanel({
 
       setExportDialogOpen(false);
       setSelectedArtifacts(new Set());
+      announceToScreenReader('Export completed successfully', 'polite');
     } catch (error) {
       console.error('Bulk export failed:', error);
-      setExportError(error instanceof Error ? error.message : 'Export failed');
+      const errorMessage =
+        error instanceof Error ? error.message : 'Export failed';
+      setExportError(errorMessage);
+      announceToScreenReader(`Export failed: ${errorMessage}`, 'assertive');
     } finally {
       setIsExporting(false);
     }
@@ -148,12 +176,12 @@ export function ArtifactsPanel({
 
   const getArtifactIcon = (type: string, mimeType?: string) => {
     if (type === 'image' || mimeType?.startsWith('image/')) {
-      return <Image color="primary" titleAccess="Image file" />;
+      return <Image color="primary" aria-label="Image file" />;
     }
     if (type === 'data' || mimeType === 'text/csv') {
-      return <TableChart color="success" titleAccess="Data file" />;
+      return <TableChart color="success" aria-label="Data file" />;
     }
-    return <InsertDriveFile color="action" titleAccess="File" />;
+    return <InsertDriveFile color="action" aria-label="File" />;
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -171,10 +199,32 @@ export function ArtifactsPanel({
     return new Date(timestamp).toLocaleString();
   };
 
+  // Set up keyboard navigation for artifact list
+  useEffect(() => {
+    if (artifacts.length === 0 || !listRef.current) return;
+
+    const listItems = Array.from(
+      listRef.current.querySelectorAll('[role="listitem"]')
+    ) as HTMLElement[];
+
+    if (listItems.length > 0) {
+      cleanupRef.current = KeyboardNavigation.setupRovingTabIndex(
+        listItems,
+        focusedIndex
+      );
+    }
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, [artifacts, focusedIndex]);
+
   if (artifacts.length === 0) {
     return (
-      <Box>
-        <Typography variant="h6" gutterBottom>
+      <Box role="region" aria-labelledby="artifacts-heading">
+        <Typography variant="h6" gutterBottom id="artifacts-heading">
           Generated Files
         </Typography>
         <Paper sx={{ p: 2, textAlign: 'center' }}>
@@ -188,7 +238,7 @@ export function ArtifactsPanel({
   }
 
   return (
-    <Box>
+    <Box role="region" aria-labelledby="artifacts-heading">
       <Box
         sx={{
           display: 'flex',
@@ -197,11 +247,23 @@ export function ArtifactsPanel({
           mb: 1,
         }}
       >
-        <Typography variant="h6">Generated Files</Typography>
-        <Stack direction="row" spacing={1}>
+        <Typography variant="h6" id="artifacts-heading">
+          Generated Files
+        </Typography>
+        <Stack
+          direction="row"
+          spacing={1}
+          role="toolbar"
+          aria-label="Artifact actions"
+        >
           <IconButton
             size="small"
             onClick={handleSelectAll}
+            aria-label={
+              selectedArtifacts.size === artifacts.length
+                ? 'Clear selection'
+                : 'Select all artifacts'
+            }
             title={
               selectedArtifacts.size === artifacts.length
                 ? 'Clear selection'
@@ -218,6 +280,7 @@ export function ArtifactsPanel({
             size="small"
             onClick={() => setExportDialogOpen(true)}
             disabled={selectedArtifacts.size === 0}
+            aria-label={`Export ${selectedArtifacts.size} selected artifacts`}
             title="Export selected"
           >
             <Archive />
@@ -226,8 +289,8 @@ export function ArtifactsPanel({
       </Box>
 
       <Paper sx={{ maxHeight: 300, overflow: 'auto' }}>
-        <List dense>
-          {artifacts.map(artifact => (
+        <List dense ref={listRef} role="list" aria-label="Generated artifacts">
+          {artifacts.map((artifact, index) => (
             <ListItem
               key={artifact.id}
               sx={{
@@ -235,6 +298,9 @@ export function ArtifactsPanel({
                 borderColor: 'divider',
                 '&:last-child': { borderBottom: 'none' },
               }}
+              role="listitem"
+              tabIndex={index === focusedIndex ? 0 : -1}
+              aria-describedby={`artifact-${artifact.id}-description`}
             >
               <FormControlLabel
                 control={
@@ -242,6 +308,7 @@ export function ArtifactsPanel({
                     size="small"
                     checked={selectedArtifacts.has(artifact.id)}
                     onChange={() => handleArtifactToggle(artifact.id)}
+                    aria-label={`Select ${artifact.name}`}
                   />
                 }
                 label=""
@@ -263,6 +330,7 @@ export function ArtifactsPanel({
                       size="small"
                       variant="outlined"
                       sx={{ fontSize: '0.7rem', height: 20 }}
+                      aria-label={`File type: ${artifact.type}`}
                     />
                     {artifact.size && (
                       <Typography variant="caption" color="text.secondary">
@@ -278,10 +346,24 @@ export function ArtifactsPanel({
                 }
               />
 
+              {/* Hidden description for screen readers */}
+              <Box sx={srOnlyStyles} id={`artifact-${artifact.id}-description`}>
+                {artifact.type === 'image' && artifact.manifest
+                  ? generateChartAltText(artifact.manifest)
+                  : `${artifact.type} file: ${artifact.name}${
+                      artifact.size ? `, ${formatFileSize(artifact.size)}` : ''
+                    }${
+                      artifact.createdAt
+                        ? `, created ${formatDate(artifact.createdAt)}`
+                        : ''
+                    }`}
+              </Box>
+
               <ListItemSecondaryAction>
                 <IconButton
                   size="small"
                   onClick={() => handleDownload(artifact.id)}
+                  aria-label={`Download ${artifact.name}`}
                   title="Download"
                 >
                   <Download />

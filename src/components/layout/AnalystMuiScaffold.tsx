@@ -15,6 +15,7 @@ import {
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { ReactNode, useState } from 'react';
+import { KeyboardNavigation } from '@/lib/accessibility';
 
 interface AnalystMuiScaffoldProps {
   children: ReactNode;
@@ -35,8 +36,12 @@ export default function AnalystMuiScaffold({
   };
 
   const artifactsDrawer = (
-    <Box sx={{ width: DRAWER_WIDTH, p: 2 }}>
-      <Typography variant="h6" gutterBottom>
+    <Box
+      sx={{ width: DRAWER_WIDTH, p: 2 }}
+      role="complementary"
+      aria-label="Artifacts sidebar"
+    >
+      <Typography variant="h6" gutterBottom id="artifacts-drawer-heading">
         Artifacts
       </Typography>
       <Typography variant="body2" color="text.secondary">
@@ -55,15 +60,18 @@ export default function AnalystMuiScaffold({
           height: APP_BAR_HEIGHT,
         }}
         elevation={1}
+        role="banner"
       >
         <Toolbar sx={{ height: APP_BAR_HEIGHT }}>
-          <AssessmentIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <AssessmentIcon sx={{ mr: 2 }} aria-hidden="true" />
+          <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
             AI Data Analyst
           </Typography>
           <IconButton
             color="inherit"
-            aria-label="toggle artifacts drawer"
+            aria-label={`${artifactsOpen ? 'Close' : 'Open'} artifacts drawer`}
+            aria-expanded={artifactsOpen}
+            aria-controls="artifacts-drawer"
             edge="end"
             onClick={handleDrawerToggle}
           >
@@ -123,6 +131,8 @@ export default function AnalystMuiScaffold({
             height: `calc(100vh - ${APP_BAR_HEIGHT}px)`,
           },
         }}
+        id="artifacts-drawer"
+        aria-labelledby="artifacts-drawer-heading"
       >
         {artifactsDrawer}
       </Drawer>

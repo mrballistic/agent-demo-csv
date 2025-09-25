@@ -192,7 +192,11 @@ export async function POST(request: NextRequest) {
         duration,
         sessionId,
         threadId,
-        true
+        true,
+        undefined,
+        result.runId,
+        undefined, // tokenUsage not available at this stage
+        [] // fileIds will be available after run completes
       );
 
       return NextResponse.json(result);
@@ -224,7 +228,8 @@ export async function POST(request: NextRequest) {
         sessionId,
         threadId,
         false,
-        errorClass
+        errorClass,
+        undefined // No runId available in error case
       );
 
       return NextResponse.json(appError.toErrorResponse(), { status: 500 });

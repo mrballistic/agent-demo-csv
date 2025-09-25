@@ -24,7 +24,8 @@
       "@/lib/*": ["./src/lib/*"],
       "@/types/*": ["./src/types/*"]
     },
-    "target": "es2017",
+    "target": "es2018",
+    "downlevelIteration": true,
     "forceConsistentCasingInFileNames": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,

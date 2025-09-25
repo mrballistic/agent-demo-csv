@@ -117,7 +117,7 @@
   - **DoD:** Each error shows friendly copy + suggested action, telemetry records error_class
   - _Requirements: 8.4, 8.6, 3.6_
 
-- [-] 15. Run cancellation and queue management
+- [ ] 15. Run cancellation and queue management
   - Create POST /api/runs/:threadId/cancel route forwarding to OpenAI
   - Implement simple FIFO queue (in-memory) with max depth
   - Add UI queue position display and 429 responses with Retry-After
@@ -133,7 +133,7 @@
   - **DoD:** Axe/Pa11y passes, keyboard can operate all controls
   - _Requirements: 3.4, 5.6, 8.5_
 
-- [ ] 17. Observability and cost tracking
+- [x] 17. Observability and cost tracking
   - Add metrics: p50/p95 run latency, token usage per run, runs started/completed/failed, queue depth
   - Implement logging: run_id, thread_id, user agent, error_class, file_ids produced
   - **DoD:** Simple dashboard shows latency and error rate
@@ -141,7 +141,7 @@
 
 ## Testing and Polish
 
-- [ ] 18. Comprehensive test suite
+- [-] 18. Comprehensive test suite
   - Write unit tests (stores, manifest parser), integration tests (upload/profile/query/zip)
   - Add E2E tests (happy path + timeout + cancel) and accessibility tests (Axe)
   - **DoD:** All critical paths covered, tests pass in CI

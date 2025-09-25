@@ -18,6 +18,7 @@ import {
   CheckCircle,
   Error as ErrorIcon,
 } from '@mui/icons-material';
+import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
 interface FileUploadResult {
   fileId: string;
@@ -148,18 +149,29 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         const systemMessage = `File received: ${file.name} (${sizeKB}KB, ${result.rowCount} rows, ${result.profileHints.columnCount} columns)`;
         onSystemMessage(systemMessage);
 
+        // Announce success to screen readers
+        announceToScreenReader(
+          `File uploaded successfully: ${file.name}`,
+          'polite'
+        );
+
         // Call success callback
         onFileUploaded(result);
 
         // Reset after a short delay
         setTimeout(resetUploadState, 2000);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Upload failed';
         setUploadState({
           isUploading: false,
           progress: 0,
-          error: error instanceof Error ? error.message : 'Upload failed',
+          error: errorMessage,
           success: false,
         });
+
+        // Announce error to screen readers
+        announceToScreenReader(`Upload failed: ${errorMessage}`, 'assertive');
       }
     },
     [validateFile, onFileUploaded, onSystemMessage, resetUploadState]
@@ -271,6 +283,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         onDragOver={handleDrag}
         onDrop={handleDrop}
         onClick={handleButtonClick}
+        role="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-label="Upload CSV file"
+        aria-describedby="upload-instructions"
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleButtonClick();
+          }
+        }}
       >
         <input
           ref={fileInputRef}
@@ -279,6 +301,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           onChange={handleFileSelect}
           style={{ display: 'none' }}
           disabled={isDisabled}
+          aria-label="Choose CSV file"
         />
 
         <Stack spacing={2} alignItems="center">
@@ -314,7 +337,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           </Typography>
 
           {!uploadState.success && !uploadState.error && (
-            <Typography variant="body2" color="text.secondary" align="center">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              align="center"
+              id="upload-instructions"
+            >
               Drag and drop your CSV file here, or click to browse
               <br />
               Maximum file size: 50MB
@@ -336,8 +364,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 variant="determinate"
                 value={uploadState.progress}
                 sx={{ mb: 1 }}
+                aria-label={`Upload progress: ${uploadState.progress}%`}
               />
-              <Typography variant="body2" color="text.secondary" align="center">
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                align="center"
+                role="status"
+                aria-live="polite"
+              >
                 Uploading... {uploadState.progress}%
               </Typography>
             </Box>

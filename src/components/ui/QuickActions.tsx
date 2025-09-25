@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
@@ -19,6 +19,11 @@ import {
   People,
   Refresh,
 } from '@mui/icons-material';
+import {
+  KeyboardNavigation,
+  announceToScreenReader,
+  srOnlyStyles,
+} from '@/lib/accessibility';
 
 interface SuggestionItem {
   id: string;
@@ -67,6 +72,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const [metadata, setMetadata] = useState<
     SuggestionsResponse['metadata'] | null
   >(null);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const fetchSuggestions = useCallback(async () => {
     if (!fileId) {
@@ -106,8 +114,34 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     fetchSuggestions();
   }, [fileId, fetchSuggestions]);
 
+  // Set up keyboard navigation for action buttons
+  useEffect(() => {
+    if (suggestions.length === 0 || !stackRef.current) return;
+
+    const buttons = Array.from(
+      stackRef.current.querySelectorAll('button:not([disabled])')
+    ) as HTMLElement[];
+
+    if (buttons.length > 0) {
+      cleanupRef.current = KeyboardNavigation.setupRovingTabIndex(
+        buttons,
+        focusedIndex
+      );
+    }
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, [suggestions, focusedIndex, disabled]);
+
   const handleActionClick = (suggestion: SuggestionItem) => {
     if (!suggestion.enabled || disabled) return;
+
+    // Announce action to screen readers
+    announceToScreenReader(`Starting ${suggestion.label} analysis`, 'polite');
+
     onAction(suggestion.id, suggestion.analysisType);
   };
 
@@ -119,8 +153,12 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   if (!fileId) {
     return (
-      <Box className={className}>
-        <Typography variant="h6" gutterBottom>
+      <Box
+        className={className}
+        role="region"
+        aria-labelledby="quick-actions-heading"
+      >
+        <Typography variant="h6" gutterBottom id="quick-actions-heading">
           Quick Actions
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -132,13 +170,22 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   if (loading) {
     return (
-      <Box className={className}>
-        <Typography variant="h6" gutterBottom>
+      <Box
+        className={className}
+        role="region"
+        aria-labelledby="quick-actions-heading"
+      >
+        <Typography variant="h6" gutterBottom id="quick-actions-heading">
           Quick Actions
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
-          <CircularProgress size={20} />
-          <Typography variant="body2" color="text.secondary">
+          <CircularProgress size={20} aria-hidden="true" />
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            role="status"
+            aria-live="polite"
+          >
             Loading suggestions...
           </Typography>
         </Box>
@@ -148,18 +195,24 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   if (error) {
     return (
-      <Box className={className}>
-        <Typography variant="h6" gutterBottom>
+      <Box
+        className={className}
+        role="region"
+        aria-labelledby="quick-actions-heading"
+      >
+        <Typography variant="h6" gutterBottom id="quick-actions-heading">
           Quick Actions
         </Typography>
         <Alert
           severity="error"
           sx={{ mb: 2 }}
+          role="alert"
           action={
             <Button
               size="small"
               onClick={fetchSuggestions}
               startIcon={<Refresh />}
+              aria-label="Retry loading suggestions"
             >
               Retry
             </Button>
@@ -172,8 +225,12 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   }
 
   return (
-    <Box className={className}>
-      <Typography variant="h6" gutterBottom>
+    <Box
+      className={className}
+      role="region"
+      aria-labelledby="quick-actions-heading"
+    >
+      <Typography variant="h6" gutterBottom id="quick-actions-heading">
         Quick Actions
       </Typography>
 
@@ -184,12 +241,18 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             size="small"
             variant="outlined"
             color="info"
+            aria-label={`Data contains ${metadata.columnCount} columns`}
           />
         </Box>
       )}
 
-      <Stack spacing={1}>
-        {suggestions.map(suggestion => {
+      <Stack
+        spacing={1}
+        ref={stackRef}
+        role="group"
+        aria-label="Analysis actions"
+      >
+        {suggestions.map((suggestion, index) => {
           const isDisabled = !suggestion.enabled || disabled;
 
           const button = (
@@ -209,6 +272,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                   color: 'text.disabled',
                 },
               }}
+              aria-describedby={`action-${suggestion.id}-description`}
+              tabIndex={index === focusedIndex && !isDisabled ? 0 : -1}
             >
               <Box sx={{ flex: 1 }}>
                 <Typography variant="button" display="block">
@@ -219,6 +284,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                   color="text.secondary"
                   display="block"
                   sx={{ textTransform: 'none', lineHeight: 1.2 }}
+                  id={`action-${suggestion.id}-description`}
                 >
                   {suggestion.description}
                 </Typography>

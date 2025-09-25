@@ -376,24 +376,35 @@ describe('Telemetry helpers', () => {
       Telemetry.trackQueueEvent('enqueued', 3, 5000, 'session123');
 
       const events = telemetryService.exportEvents();
-      expect(events).toHaveLength(2); // 1 audit + 1 metric
+      expect(events).toHaveLength(3); // 1 audit + 2 metrics (wait time + queue depth)
 
       const auditEvent = events.find(e => e.type === 'audit') as AuditEvent;
       expect(auditEvent.data.action).toBe('queue_enqueued');
       expect(auditEvent.data.details.queuePosition).toBe(3);
       expect(auditEvent.data.details.waitTimeMs).toBe(5000);
 
-      const metricEvent = events.find(e => e.type === 'metric') as MetricEvent;
-      expect(metricEvent.data.metricName).toBe('queue_wait_time');
-      expect(metricEvent.data.value).toBe(5000);
+      const waitTimeEvent = events.find(
+        e => e.type === 'metric' && e.data.metricName === 'queue_wait_time'
+      ) as MetricEvent;
+      expect(waitTimeEvent.data.value).toBe(5000);
+
+      const depthEvent = events.find(
+        e => e.type === 'metric' && e.data.metricName === 'queue_depth'
+      ) as MetricEvent;
+      expect(depthEvent.data.value).toBe(3);
     });
 
     it('should track queue events without wait time', () => {
       Telemetry.trackQueueEvent('dequeued', 1);
 
       const events = telemetryService.exportEvents();
-      expect(events).toHaveLength(1); // Only audit event
-      expect(events[0].type).toBe('audit');
+      expect(events).toHaveLength(2); // 1 audit + 1 queue depth metric
+      expect(events.find(e => e.type === 'audit')).toBeDefined();
+      expect(
+        events.find(
+          e => e.type === 'metric' && e.data.metricName === 'queue_depth'
+        )
+      ).toBeDefined();
     });
   });
 });

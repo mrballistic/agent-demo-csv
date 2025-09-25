@@ -22,6 +22,7 @@ import {
   KeyboardArrowDown,
 } from '@mui/icons-material';
 import { ChatMessage } from '@/types';
+import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
 interface StreamingMessage extends ChatMessage {
   isStreaming?: boolean;
@@ -145,6 +146,9 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           : msg
       )
     );
+
+    // Announce completion to screen readers
+    announceToScreenReader('Analysis response completed', 'polite');
   }, []);
 
   // Handle run failures
@@ -388,6 +392,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({
         bgcolor: 'background.paper',
         position: 'relative',
       }}
+      role="main"
+      aria-label="Chat conversation"
     >
       {/* Connection status */}
       {connectionError && (
@@ -426,6 +432,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           display: 'flex',
           flexDirection: 'column',
         }}
+        role="log"
+        aria-label="Chat messages"
+        aria-live="polite"
+        aria-atomic="false"
       >
         {messages.length === 0 ? (
           <Box
@@ -442,7 +452,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           </Box>
         ) : (
           <Stack spacing={2}>
-            {messages.map(message => (
+            {messages.map((message, index) => (
               <Box
                 key={message.id}
                 sx={{
@@ -452,6 +462,9 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                   opacity: message.isComplete === false ? 0.7 : 1,
                   transition: 'opacity 0.3s ease',
                 }}
+                role="article"
+                aria-label={`Message from ${message.role} at ${message.timestamp.toLocaleTimeString()}`}
+                tabIndex={0}
               >
                 <Chip
                   icon={getMessageIcon(message.role)}
@@ -459,8 +472,16 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                   size="small"
                   color={getMessageColor(message.role) as any}
                   variant="outlined"
+                  aria-hidden="true"
                 />
                 <Box sx={{ flex: 1 }}>
+                  <Box sx={srOnlyStyles}>
+                    {message.role === 'user'
+                      ? 'You said:'
+                      : message.role === 'assistant'
+                        ? 'AI responded:'
+                        : 'System message:'}
+                  </Box>
                   <Typography
                     variant="body1"
                     sx={{
@@ -470,27 +491,40 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                   >
                     {message.content}
                     {message.isStreaming && (
-                      <Box
-                        component="span"
-                        sx={{
-                          display: 'inline-block',
-                          width: 2,
-                          height: '1.2em',
-                          bgcolor: 'primary.main',
-                          ml: 0.5,
-                          animation: 'blink 1s infinite',
-                          '@keyframes blink': {
-                            '0%, 50%': { opacity: 1 },
-                            '51%, 100%': { opacity: 0 },
-                          },
-                        }}
-                      />
+                      <>
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-block',
+                            width: 2,
+                            height: '1.2em',
+                            bgcolor: 'primary.main',
+                            ml: 0.5,
+                            animation: 'blink 1s infinite',
+                            '@keyframes blink': {
+                              '0%, 50%': { opacity: 1 },
+                              '51%, 100%': { opacity: 0 },
+                            },
+                          }}
+                          aria-hidden="true"
+                        />
+                        <Box sx={srOnlyStyles} aria-live="polite">
+                          AI is typing...
+                        </Box>
+                      </>
                     )}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {message.timestamp.toLocaleTimeString()}
                     {message.isStreaming && (
-                      <CircularProgress size={12} sx={{ ml: 1 }} />
+                      <>
+                        <CircularProgress
+                          size={12}
+                          sx={{ ml: 1 }}
+                          aria-hidden="true"
+                        />
+                        <Box sx={srOnlyStyles}>Processing response</Box>
+                      </>
                     )}
                   </Typography>
                 </Box>
@@ -516,6 +550,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({
             },
           }}
           size="small"
+          aria-label="Scroll to bottom of chat"
+          title="Scroll to latest message"
         >
           <KeyboardArrowDown />
         </IconButton>
@@ -552,6 +588,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                 bgcolor: 'background.paper',
               },
             }}
+            aria-label="Chat input"
+            aria-describedby="chat-input-help"
           />
           {isRunning ? (
             <IconButton
@@ -559,6 +597,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({
               color="error"
               disabled={!onCancelRun}
               sx={{ mb: 0.5 }}
+              aria-label="Cancel analysis"
+              title="Cancel current analysis"
             >
               <Stop />
             </IconButton>
@@ -568,6 +608,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({
               disabled={disabled || !inputValue.trim()}
               color="primary"
               sx={{ mb: 0.5 }}
+              aria-label="Send message"
+              title="Send message (Enter)"
             >
               <Send />
             </IconButton>
@@ -583,8 +625,15 @@ const ChatPane: React.FC<ChatPaneProps> = ({
               borderRadius: '50%',
               bgcolor: isConnected ? 'success.main' : 'error.main',
             }}
+            aria-hidden="true"
           />
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            id="chat-input-help"
+            role="status"
+            aria-live="polite"
+          >
             {isConnected ? 'Connected' : 'Disconnected'}
           </Typography>
         </Box>

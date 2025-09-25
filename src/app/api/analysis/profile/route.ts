@@ -169,7 +169,11 @@ export async function POST(request: NextRequest) {
         duration,
         currentSessionId,
         session.threadId,
-        true
+        true,
+        undefined,
+        result.runId,
+        undefined, // tokenUsage not available at this stage
+        [] // fileIds will be available after run completes
       );
 
       return NextResponse.json(result);

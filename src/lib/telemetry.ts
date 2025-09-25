@@ -71,16 +71,16 @@ class TelemetryService {
     const event: ErrorEvent = {
       type: 'error',
       timestamp: new Date().toISOString(),
-      sessionId: context.sessionId,
-      threadId: context.threadId,
-      userId: context.userId,
-      userAgent: context.userAgent,
-      ipAddress: context.ipAddress,
+      ...(context.sessionId !== undefined && { sessionId: context.sessionId }),
+      ...(context.threadId !== undefined && { threadId: context.threadId }),
+      ...(context.userId !== undefined && { userId: context.userId }),
+      ...(context.userAgent !== undefined && { userAgent: context.userAgent }),
+      ...(context.ipAddress !== undefined && { ipAddress: context.ipAddress }),
       data: {
         ...error,
-        stackTrace: context.stackTrace,
-        requestId: context.requestId,
-        endpoint: context.endpoint,
+        ...(context.stackTrace && { stackTrace: context.stackTrace }),
+        ...(context.requestId && { requestId: context.requestId }),
+        ...(context.endpoint && { endpoint: context.endpoint }),
       },
     };
 
@@ -111,13 +111,13 @@ class TelemetryService {
     const event: MetricEvent = {
       type: 'metric',
       timestamp: new Date().toISOString(),
-      sessionId: options.sessionId,
-      threadId: options.threadId,
+      ...(options.sessionId !== undefined && { sessionId: options.sessionId }),
+      ...(options.threadId !== undefined && { threadId: options.threadId }),
       data: {
         metricName,
         value,
-        unit: options.unit,
-        tags: options.tags,
+        ...(options.unit !== undefined && { unit: options.unit }),
+        ...(options.tags !== undefined && { tags: options.tags }),
       },
     };
 
@@ -142,15 +142,15 @@ class TelemetryService {
     const event: AuditEvent = {
       type: 'audit',
       timestamp: new Date().toISOString(),
-      sessionId: options.sessionId,
-      threadId: options.threadId,
-      userId: options.userId,
-      userAgent: options.userAgent,
-      ipAddress: options.ipAddress,
+      ...(options.sessionId !== undefined && { sessionId: options.sessionId }),
+      ...(options.threadId !== undefined && { threadId: options.threadId }),
+      ...(options.userId !== undefined && { userId: options.userId }),
+      ...(options.userAgent !== undefined && { userAgent: options.userAgent }),
+      ...(options.ipAddress !== undefined && { ipAddress: options.ipAddress }),
       data: {
         action,
-        resource: options.resource,
-        details: options.details,
+        ...(options.resource !== undefined && { resource: options.resource }),
+        ...(options.details !== undefined && { details: options.details }),
       },
     };
 
@@ -248,10 +248,10 @@ class TelemetryService {
       count,
       sum,
       avg: sum / count,
-      min: values[0],
-      max: values[count - 1],
-      p50: values[Math.floor(count * 0.5)],
-      p95: values[Math.floor(count * 0.95)],
+      min: values[0] ?? 0,
+      max: values[count - 1] ?? 0,
+      p50: values[Math.floor(count * 0.5)] ?? 0,
+      p95: values[Math.floor(count * 0.95)] ?? 0,
     };
   }
 
@@ -355,11 +355,22 @@ export const Telemetry = {
     sessionId: string,
     threadId: string,
     success: boolean,
-    errorClass?: string
+    errorClass?: string,
+    runId?: string,
+    tokenUsage?: { inputTokens: number; outputTokens: number },
+    fileIds?: string[]
   ) => {
     telemetryService.logAudit('analysis_completion', {
       resource: 'analysis',
-      details: { analysisType, durationMs, success, errorClass },
+      details: {
+        analysisType,
+        durationMs,
+        success,
+        errorClass,
+        runId,
+        tokenUsage,
+        fileIds,
+      },
       sessionId,
       threadId,
     });
@@ -370,10 +381,36 @@ export const Telemetry = {
         analysisType,
         success: success.toString(),
         errorClass: errorClass || 'none',
+        runId: runId || 'unknown',
       },
       sessionId,
       threadId,
     });
+
+    // Track token usage if provided
+    if (tokenUsage) {
+      telemetryService.logMetric(
+        'openai_tokens_input',
+        tokenUsage.inputTokens,
+        {
+          unit: 'tokens',
+          tags: { analysisType, runId: runId || 'unknown' },
+          sessionId,
+          threadId,
+        }
+      );
+
+      telemetryService.logMetric(
+        'openai_tokens_output',
+        tokenUsage.outputTokens,
+        {
+          unit: 'tokens',
+          tags: { analysisType, runId: runId || 'unknown' },
+          sessionId,
+          threadId,
+        }
+      );
+    }
   },
 
   /**
@@ -422,19 +459,91 @@ export const Telemetry = {
     action: 'enqueued' | 'dequeued' | 'timeout',
     queuePosition?: number,
     waitTimeMs?: number,
-    sessionId?: string
+    sessionId?: string,
+    runId?: string
   ) => {
     telemetryService.logAudit(`queue_${action}`, {
       resource: 'queue',
-      details: { queuePosition, waitTimeMs },
-      sessionId,
+      details: { queuePosition, waitTimeMs, runId },
+      ...(sessionId !== undefined && { sessionId }),
     });
 
     if (waitTimeMs) {
       telemetryService.logMetric('queue_wait_time', waitTimeMs, {
         unit: 'ms',
-        tags: { action },
+        tags: { action, runId: runId || 'unknown' },
+        ...(sessionId !== undefined && { sessionId }),
+      });
+    }
+
+    // Track queue depth
+    telemetryService.logMetric('queue_depth', queuePosition || 0, {
+      unit: 'count',
+      tags: { action },
+      ...(sessionId !== undefined && { sessionId }),
+    });
+  },
+
+  /**
+   * Track run lifecycle events
+   */
+  trackRunEvent: (
+    action: 'started' | 'completed' | 'failed' | 'cancelled',
+    runId: string,
+    sessionId: string,
+    threadId: string,
+    details?: {
+      analysisType?: string;
+      durationMs?: number;
+      errorClass?: string;
+      tokenUsage?: { inputTokens: number; outputTokens: number };
+      fileIds?: string[];
+    }
+  ) => {
+    telemetryService.logAudit(`run_${action}`, {
+      resource: 'run',
+      details: { runId, ...details },
+      sessionId,
+      threadId,
+    });
+
+    // Track run counts by status
+    telemetryService.logMetric('runs_total', 1, {
+      unit: 'count',
+      tags: {
+        status: action,
+        analysisType: details?.analysisType || 'unknown',
+        runId,
+      },
+      sessionId,
+      threadId,
+    });
+  },
+
+  /**
+   * Track OpenAI API usage
+   */
+  trackOpenAIUsage: (
+    operation: 'create_thread' | 'create_message' | 'create_run' | 'stream_run',
+    sessionId: string,
+    threadId?: string,
+    runId?: string,
+    tokenUsage?: { inputTokens: number; outputTokens: number },
+    durationMs?: number
+  ) => {
+    telemetryService.logAudit('openai_api_call', {
+      resource: 'openai',
+      details: { operation, runId, tokenUsage, durationMs },
+      sessionId,
+      ...(threadId !== undefined && { threadId }),
+    });
+
+    if (durationMs) {
+      telemetryService.logMetric('openai_api_latency', durationMs, {
+        unit: 'ms',
+        tags: { operation, runId: runId || 'unknown' },
         sessionId,
+        ...(threadId !== undefined && { threadId }),
       });
     }
   },
