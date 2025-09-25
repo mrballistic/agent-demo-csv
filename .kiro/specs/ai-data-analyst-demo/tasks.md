@@ -77,7 +77,7 @@
   - **DoD:** Chat shows "Profile created" + insight, Artifacts panel shows summary.md
   - _Requirements: 2.1, 2.2, 3.1, 3.2, 6.1, 6.2, 6.3_
 
-- [-] 10. Chat interface with live updates
+- [x] 10. Chat interface with live updates
   - Create ChatPane with real-time updates from SSE
   - Implement optimistic user messages and scroll management
   - Add keyboard accessibility and smooth streaming delta rendering
