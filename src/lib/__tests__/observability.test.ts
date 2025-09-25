@@ -366,11 +366,11 @@ describe('Logging Requirements', () => {
     expect(events).toHaveLength(1);
 
     const event = events[0];
-    expect(event.threadId).toBe(threadId);
-    expect(event.userAgent).toBe(userAgent);
-    expect(event.data.details.runId).toBe(runId);
-    expect(event.data.details.errorClass).toBe(errorClass);
-    expect(event.data.details.fileIds).toEqual(fileIds);
+    expect(event!.threadId).toBe(threadId);
+    expect(event!.userAgent).toBe(userAgent);
+    expect(event!.data.details.runId).toBe(runId);
+    expect(event!.data.details.errorClass).toBe(errorClass);
+    expect(event!.data.details.fileIds).toEqual(fileIds);
   });
 
   it('should include timestamps in all log entries', () => {
@@ -383,7 +383,7 @@ describe('Logging Requirements', () => {
     expect(events).toHaveLength(1);
 
     const event = events[0];
-    expect(event.timestamp).toBeDefined();
-    expect(new Date(event.timestamp).getTime()).toBeGreaterThan(0);
+    expect(event!.timestamp).toBeDefined();
+    expect(new Date(event!.timestamp).getTime()).toBeGreaterThan(0);
   });
 });

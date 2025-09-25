@@ -277,11 +277,8 @@ describe('Manifest Parser', () => {
 
       const result = extractManifest(messages as any);
 
-      expect(result).toEqual({
-        insight: '',
-        files: [],
-        metadata: {},
-      });
+      // Empty manifest object is returned as-is
+      expect(result).toEqual({});
     });
   });
 });

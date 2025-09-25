@@ -1,0 +1,16 @@
+order_id,order_date,customer_email,customer_phone,channel,region,sku,category,qty,unit_price,discount,tax,shipping_cost
+ORD-001,2024-01-15,john.doe@email.com,555-123-4567,online,north,SKU-A001,electronics,2,299.99,0.10,23.99,9.99
+ORD-002,2024-01-16,jane.smith@gmail.com,555-987-6543,retail,south,SKU-B002,clothing,1,89.99,0.05,7.20,5.99
+ORD-003,2024-01-17,bob.wilson@yahoo.com,555-456-7890,online,west,SKU-C003,home,3,149.99,0.15,35.99,12.99
+ORD-004,2024-01-18,alice.brown@hotmail.com,555-234-5678,retail,east,SKU-A001,electronics,1,299.99,0.00,24.00,7.99
+ORD-005,2024-01-19,charlie.davis@outlook.com,555-345-6789,online,north,SKU-D004,books,5,19.99,0.20,7.99,3.99
+ORD-006,2024-01-20,diana.miller@aol.com,555-567-8901,retail,south,SKU-E005,sports,2,79.99,0.10,12.79,8.99
+ORD-007,2024-01-21,frank.garcia@icloud.com,555-678-9012,online,west,SKU-F006,beauty,1,45.99,0.00,3.68,4.99
+ORD-008,2024-01-22,grace.martinez@proton.me,555-789-0123,retail,east,SKU-G007,toys,4,24.99,0.25,7.99,6.99
+ORD-009,2024-01-23,henry.rodriguez@fastmail.com,555-890-1234,online,north,SKU-H008,kitchen,1,199.99,0.05,15.99,11.99
+ORD-010,2024-01-24,ivy.lopez@tutanota.com,555-901-2345,retail,south,SKU-I009,garden,2,89.99,0.10,14.39,9.99
+ORD-011,2024-01-25,jack.gonzalez@zoho.com,555-012-3456,online,west,SKU-J010,automotive,1,349.99,0.00,28.00,15.99
+ORD-012,2024-01-26,karen.perez@yandex.com,555-123-4567,retail,east,SKU-K011,health,3,29.99,0.15,6.74,4.99
+ORD-013,2024-01-27,liam.sanchez@mail.ru,555-234-5678,online,north,SKU-L012,music,2,59.99,0.20,9.59,7.99
+ORD-014,2024-01-28,mia.ramirez@gmx.com,555-345-6789,retail,south,SKU-M013,office,1,129.99,0.00,10.40,8.99
+ORD-015,2024-01-29,noah.torres@live.com,555-456-7890,online,west,SKU-N014,pet,4,39.99,0.10,12.79,5.99

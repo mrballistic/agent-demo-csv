@@ -107,12 +107,12 @@ describe('/api/observability/dashboard', () => {
     vi.mocked(telemetryService.getErrorStats).mockReturnValue({
       totalErrors: 3,
       errorsByType: {
-        VALIDATION_ERROR: 1,
-        API_ERROR: 1,
-        TIMEOUT_ERROR: 1,
-        USER_ERROR: 0,
-        SYSTEM_ERROR: 0,
-        QUEUE_LIMIT_REACHED: 0,
+        validation_error: 1,
+        api_error: 1,
+        timeout_error: 1,
+        user_error: 0,
+        system_error: 0,
+        queue_limit_reached: 0,
       },
       errorsByClass: {
         file_validation: 1,

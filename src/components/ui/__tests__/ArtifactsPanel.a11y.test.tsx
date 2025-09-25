@@ -1,4 +1,5 @@
 import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { ArtifactsPanel, ArtifactItem } from '../ArtifactsPanel';
@@ -126,7 +127,7 @@ describe('ArtifactsPanel Accessibility', () => {
     const downloadButtons = screen.getAllByLabelText(/Download/);
 
     // Click download button
-    fireEvent.click(downloadButtons[0]);
+    fireEvent.click(downloadButtons[0]!);
 
     expect(mockDownload).toHaveBeenCalledWith('1');
   });

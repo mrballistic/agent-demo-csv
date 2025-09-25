@@ -57,7 +57,7 @@ describe('Export Functionality', () => {
     const selectedIds = [artifactIds[0], artifactIds[2]]; // profile and data
 
     const filteredFiles = selectedIds
-      .map(id => fileStore.getFileMetadata(id))
+      .map(id => fileStore.getFileMetadata(id!))
       .filter(metadata => metadata && metadata.sessionId === sessionId);
 
     expect(filteredFiles).toHaveLength(2);

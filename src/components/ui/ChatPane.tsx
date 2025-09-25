@@ -12,6 +12,7 @@ import {
   CircularProgress,
   Alert,
   Fade,
+  Skeleton,
 } from '@mui/material';
 import {
   Person,
@@ -40,6 +41,7 @@ interface ChatPaneProps {
   fileId?: string | null;
   queuePosition?: number;
   estimatedWaitTime?: number;
+  isLoading?: boolean;
 }
 
 interface StreamEvent {
@@ -59,6 +61,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   fileId,
   queuePosition,
   estimatedWaitTime,
+  isLoading = false,
 }) => {
   const [messages, setMessages] = useState<StreamingMessage[]>(initialMessages);
   const [inputValue, setInputValue] = useState('');
@@ -437,7 +440,29 @@ const ChatPane: React.FC<ChatPaneProps> = ({
         aria-live="polite"
         aria-atomic="false"
       >
-        {messages.length === 0 ? (
+        {isLoading ? (
+          <Stack spacing={2}>
+            {/* Loading shimmer for messages */}
+            {[1, 2, 3].map(i => (
+              <Box
+                key={i}
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}
+              >
+                <Skeleton
+                  variant="rectangular"
+                  width={80}
+                  height={24}
+                  sx={{ borderRadius: 12 }}
+                />
+                <Box sx={{ flex: 1 }}>
+                  <Skeleton variant="text" width="80%" height={24} />
+                  <Skeleton variant="text" width="60%" height={20} />
+                  <Skeleton variant="text" width="40%" height={16} />
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        ) : messages.length === 0 ? (
           <Box
             sx={{
               flex: 1,
@@ -448,6 +473,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           >
             <Typography variant="body2" color="text.secondary" align="center">
               Upload a CSV file to start analyzing your data.
+              <br />
+              <Typography variant="caption" color="text.disabled">
+                Try our sample data files to get started quickly.
+              </Typography>
             </Typography>
           </Box>
         ) : (

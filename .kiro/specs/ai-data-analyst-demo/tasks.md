@@ -141,13 +141,13 @@
 
 ## Testing and Polish
 
-- [-] 18. Comprehensive test suite
+- [x] 18. Comprehensive test suite
   - Write unit tests (stores, manifest parser), integration tests (upload/profile/query/zip)
   - Add E2E tests (happy path + timeout + cancel) and accessibility tests (Axe)
   - **DoD:** All critical paths covered, tests pass in CI
   - _Requirements: All requirements validation_
 
-- [ ] 19. Demo polish and sample data
+- [x] 19. Demo polish and sample data
   - Create sample CSVs (valid, PII, outliers scenarios)
   - Add loading shimmers, help text, "Delete all my data" action
   - Implement proper error recovery and user guidance

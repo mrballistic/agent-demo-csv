@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import ChatPane from '../ChatPane';
 import { ChatMessage } from '@/types';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockMessages: ChatMessage[] = [
   {

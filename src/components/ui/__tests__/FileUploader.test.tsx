@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FileUploader } from '../FileUploader';
+import FileUploader from '../FileUploader';
 
 // Mock fetch for file upload
 global.fetch = vi.fn();
@@ -19,6 +19,8 @@ describe('FileUploader Component', () => {
   const defaultProps = {
     onUploadSuccess: mockOnUploadSuccess,
     onUploadError: mockOnUploadError,
+    onFileUploaded: vi.fn(),
+    onSystemMessage: vi.fn(),
     disabled: false,
   };
 

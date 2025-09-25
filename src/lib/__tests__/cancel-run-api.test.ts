@@ -39,9 +39,10 @@ describe('Cancel Run API', () => {
       messages: [],
       artifacts: [],
       lastActivity: Date.now(),
-      expiresAt: Date.now() + 3600000,
+      ttlExpiresAt: Date.now() + 3600000,
       metrics: {
-        analysisRequests: 0,
+        uploadsCount: 0,
+        analysesCount: 0,
         artifactsGenerated: 0,
         totalTokensUsed: 0,
       },

@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import FileUploader from '../FileUploader';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('FileUploader Accessibility', () => {
   it('should not have accessibility violations', async () => {

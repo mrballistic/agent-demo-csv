@@ -7,7 +7,9 @@ import {
   FileUploader,
   QuickActions,
   ArtifactsPanel,
+  HelpText,
 } from '@/components/ui';
+import DataDeletionDialog from '@/components/ui/DataDeletionDialog';
 import RunStatusChip from '@/components/ui/RunStatusChip';
 import { useChat } from '@/hooks';
 import {
@@ -18,8 +20,11 @@ import {
   Grid,
   Alert,
   Chip,
+  IconButton,
+  Tooltip,
+  Snackbar,
 } from '@mui/material';
-import { CloudUpload, Chat } from '@mui/icons-material';
+import { CloudUpload, Chat, DeleteForever } from '@mui/icons-material';
 import { ChatMessage, ArtifactItem } from '@/types';
 
 export default function Home() {
@@ -35,6 +40,8 @@ export default function Home() {
   const [estimatedWaitTime, setEstimatedWaitTime] = useState<
     number | undefined
   >();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   const {
     messages,
@@ -148,18 +155,62 @@ export default function Home() {
     }
   };
 
+  const handleDataDeletion = async () => {
+    // Reset all state
+    setHasUploadedFile(false);
+    setCurrentFileId(null);
+    setArtifacts([]);
+    setRunStatus('idle');
+    setElapsedTime(0);
+    setQueuePosition(undefined);
+    setEstimatedWaitTime(undefined);
+
+    // Show success message
+    setDeleteSuccess(true);
+
+    // Reinitialize with new thread
+    const newThreadId = `thread_${Date.now()}`;
+    setThreadId(newThreadId);
+  };
+
   return (
     <AnalystMuiScaffold>
       <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            AI Data Analyst
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Upload your CSV data and get instant insights with AI-powered
-            analysis.
-          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+            }}
+          >
+            <Box>
+              <Typography variant="h4" component="h1" gutterBottom>
+                AI Data Analyst
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Upload your CSV data and get instant insights with AI-powered
+                analysis.
+              </Typography>
+            </Box>
+
+            {/* Data deletion button */}
+            {(hasUploadedFile ||
+              messages.length > 0 ||
+              artifacts.length > 0) && (
+              <Tooltip title="Delete all my data">
+                <IconButton
+                  onClick={() => setShowDeleteDialog(true)}
+                  color="error"
+                  size="small"
+                  sx={{ mt: 1 }}
+                >
+                  <DeleteForever />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
 
           {/* Status indicators */}
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
@@ -228,11 +279,17 @@ export default function Home() {
                   disabled={isRunning}
                 />
 
+                {/* Help Text */}
+                {!hasUploadedFile && <HelpText section="upload" compact />}
+
                 {/* Artifacts */}
                 <ArtifactsPanel
                   artifacts={artifacts}
                   threadId={threadId ?? undefined}
                 />
+
+                {/* Additional Help */}
+                {hasUploadedFile && <HelpText section="analysis" />}
               </Stack>
             </Grid>
 
@@ -284,6 +341,31 @@ export default function Home() {
           </Grid>
         </Box>
       </Box>
+
+      {/* Data Deletion Dialog */}
+      <DataDeletionDialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDataDeletion}
+        sessionId={threadId || ''}
+      />
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={deleteSuccess}
+        autoHideDuration={4000}
+        onClose={() => setDeleteSuccess(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setDeleteSuccess(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          All your data has been permanently deleted
+        </Alert>
+      </Snackbar>
     </AnalystMuiScaffold>
   );
 }

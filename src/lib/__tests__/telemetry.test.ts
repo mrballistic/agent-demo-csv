@@ -351,7 +351,7 @@ describe('Telemetry helpers', () => {
 
       const events = telemetryService.exportEvents();
       expect(events).toHaveLength(1); // Only audit event
-      expect(events[0].type).toBe('audit');
+      expect(events[0]!.type).toBe('audit');
     });
   });
 

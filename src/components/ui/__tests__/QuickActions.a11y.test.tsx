@@ -1,4 +1,5 @@
 import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import QuickActions from '../QuickActions';
@@ -96,7 +97,9 @@ describe('QuickActions Accessibility', () => {
       expect(screen.getByText('Profile Data')).toBeInTheDocument();
     });
 
-    const buttons = screen.getAllByRole('button').filter(btn => !btn.disabled);
+    const buttons = screen
+      .getAllByRole('button')
+      .filter(btn => !(btn as HTMLButtonElement).disabled);
 
     // First enabled button should be focusable
     expect(buttons[0]).toHaveAttribute('tabindex', '0');

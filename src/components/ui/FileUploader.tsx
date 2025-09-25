@@ -11,12 +11,21 @@ import {
   Paper,
   Stack,
   Chip,
+  Divider,
+  Link,
+  Card,
+  CardContent,
+  Grid,
 } from '@mui/material';
 import {
   CloudUpload,
   InsertDriveFile,
   CheckCircle,
   Error as ErrorIcon,
+  Download,
+  DataObject,
+  Warning,
+  TrendingUp,
 } from '@mui/icons-material';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
@@ -37,6 +46,7 @@ interface FileUploaderProps {
   onSystemMessage: (message: string) => void;
   disabled?: boolean;
   className?: string;
+  showSampleData?: boolean;
 }
 
 interface UploadState {
@@ -51,6 +61,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   onSystemMessage,
   disabled = false,
   className,
+  showSampleData = true,
 }) => {
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -246,10 +257,50 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setUploadState(prev => ({ ...prev, error: null }));
   }, []);
 
+  const handleSampleDataDownload = useCallback((filename: string) => {
+    const link = document.createElement('a');
+    link.href = `/sample-data/${filename}`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
   const isDisabled = disabled || uploadState.isUploading;
 
+  const sampleDatasets = [
+    {
+      name: 'Valid Sales Data',
+      filename: 'valid-sales-data.csv',
+      description: 'Clean sales data with all required columns',
+      icon: <DataObject color="primary" />,
+      rows: 20,
+      features: ['Revenue analysis', 'Channel performance', 'Trend analysis'],
+    },
+    {
+      name: 'Data with PII',
+      filename: 'pii-sales-data.csv',
+      description: 'Sales data containing email and phone columns',
+      icon: <Warning color="warning" />,
+      rows: 15,
+      features: [
+        'PII detection demo',
+        'Data privacy handling',
+        'Aggregated insights',
+      ],
+    },
+    {
+      name: 'Data with Outliers',
+      filename: 'outliers-sales-data.csv',
+      description: 'Sales data with unusual patterns and outliers',
+      icon: <TrendingUp color="secondary" />,
+      rows: 20,
+      features: ['Outlier detection', 'Data quality issues', 'Error handling'],
+    },
+  ];
+
   return (
-    <>
+    <Box>
       <Paper
         {...(className && { className })}
         sx={{
@@ -337,16 +388,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           </Typography>
 
           {!uploadState.success && !uploadState.error && (
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              align="center"
-              id="upload-instructions"
-            >
-              Drag and drop your CSV file here, or click to browse
-              <br />
-              Maximum file size: 50MB
-            </Typography>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                id="upload-instructions"
+                sx={{ mb: 1 }}
+              >
+                Drag and drop your CSV file here, or click to browse
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                Maximum file size: 50MB • Supported format: CSV
+                <br />
+                Required columns: order_date, qty, unit_price (or net_revenue)
+              </Typography>
+            </Box>
           )}
 
           {selectedFile && !uploadState.success && !uploadState.error && (
@@ -393,6 +449,109 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </Stack>
       </Paper>
 
+      {/* Sample Data Section */}
+      {showSampleData && !uploadState.success && (
+        <Box sx={{ mt: 3 }}>
+          <Divider sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Or try our sample data
+            </Typography>
+          </Divider>
+
+          <Grid container spacing={2}>
+            {sampleDatasets.map(dataset => (
+              <Grid item xs={12} md={4} key={dataset.filename}>
+                <Card
+                  variant="outlined"
+                  sx={{
+                    height: '100%',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      boxShadow: 2,
+                      borderColor: 'primary.main',
+                    },
+                  }}
+                  onClick={() => handleSampleDataDownload(dataset.filename)}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      {dataset.icon}
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ ml: 1, fontWeight: 'medium' }}
+                      >
+                        {dataset.name}
+                      </Typography>
+                    </Box>
+
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      {dataset.description}
+                    </Typography>
+
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      sx={{ mb: 1, display: 'block' }}
+                    >
+                      {dataset.rows} rows • CSV format
+                    </Typography>
+
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 0.5,
+                        mb: 1,
+                      }}
+                    >
+                      {dataset.features.slice(0, 2).map(feature => (
+                        <Chip
+                          key={feature}
+                          label={feature}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                      ))}
+                      {dataset.features.length > 2 && (
+                        <Chip
+                          label={`+${dataset.features.length - 2} more`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                      )}
+                    </Box>
+
+                    <Button
+                      size="small"
+                      startIcon={<Download />}
+                      fullWidth
+                      variant="outlined"
+                      sx={{ mt: 'auto' }}
+                    >
+                      Download Sample
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography variant="caption" color="text.disabled">
+              Download a sample file, then upload it to see the AI data analyst
+              in action
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       {/* Error Toast */}
       <Snackbar
         open={!!uploadState.error}
@@ -409,7 +568,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           {uploadState.error}
         </Alert>
       </Snackbar>
-    </>
+    </Box>
   );
 };
 

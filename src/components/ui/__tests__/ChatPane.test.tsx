@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ChatPane } from '../ChatPane';
+import ChatPane from '../ChatPane';
 
 // Mock the useChat hook
 vi.mock('@/hooks/useChat', () => ({
@@ -32,14 +32,14 @@ describe('ChatPane Component', () => {
   });
 
   it('should render chat interface with input field', () => {
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByRole('textbox')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument();
   });
 
   it('should display welcome message when no messages', () => {
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByText(/welcome to ai data analyst/i)).toBeInTheDocument();
     expect(screen.getByText(/upload a csv file/i)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByText('Hello')).toBeInTheDocument();
     expect(screen.getByText(/Hi there! How can I help/)).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('ChatPane Component', () => {
 
   it('should send message when form is submitted', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox');
     const sendButton = screen.getByRole('button', { name: /send/i });
@@ -89,7 +89,7 @@ describe('ChatPane Component', () => {
 
   it('should send message on Enter key press', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox');
 
@@ -100,7 +100,7 @@ describe('ChatPane Component', () => {
 
   it('should not send empty messages', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const sendButton = screen.getByRole('button', { name: /send/i });
 
@@ -111,7 +111,7 @@ describe('ChatPane Component', () => {
 
   it('should clear input after sending message', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox') as HTMLInputElement;
 
@@ -131,7 +131,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox');
     const sendButton = screen.getByRole('button', { name: /send/i });
@@ -157,7 +157,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByText(/analyzing/i)).toBeInTheDocument();
   });
@@ -172,7 +172,7 @@ describe('ChatPane Component', () => {
       error: 'Failed to send message',
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByText(/failed to send message/i)).toBeInTheDocument();
   });
@@ -184,7 +184,7 @@ describe('ChatPane Component', () => {
     const mockScrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = mockScrollIntoView;
 
-    const { rerender } = render(<ChatPane />);
+    const { rerender } = render(<ChatPane messages={[]} />);
 
     // Add a new message
     useChat.mockReturnValue({
@@ -202,7 +202,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    rerender(<ChatPane />);
+    rerender(<ChatPane messages={[]} />);
 
     await waitFor(() => {
       expect(mockScrollIntoView).toHaveBeenCalled();
@@ -226,7 +226,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const systemMessage = screen.getByText(/file uploaded successfully/i);
     expect(systemMessage).toBeInTheDocument();
@@ -252,7 +252,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     // Should display formatted time
     expect(screen.getByText(/12:00/)).toBeInTheDocument();
@@ -260,7 +260,7 @@ describe('ChatPane Component', () => {
 
   it('should handle multiline messages', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox');
 
@@ -272,7 +272,7 @@ describe('ChatPane Component', () => {
 
   it('should support keyboard navigation', async () => {
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     const input = screen.getByRole('textbox');
 
@@ -310,7 +310,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    render(<ChatPane />);
+    render(<ChatPane messages={[]} />);
 
     expect(screen.getByText(/analysis complete/i)).toBeInTheDocument();
     expect(screen.getByText(/chart\.png/i)).toBeInTheDocument();
@@ -336,7 +336,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    const { rerender } = render(<ChatPane />);
+    const { rerender } = render(<ChatPane messages={[]} />);
 
     expect(screen.getByText(/analyzing your data\.\.\./i)).toBeInTheDocument();
 
@@ -357,7 +357,7 @@ describe('ChatPane Component', () => {
       error: null,
     });
 
-    rerender(<ChatPane />);
+    rerender(<ChatPane messages={[]} />);
 
     expect(
       screen.getByText(/analysis complete! here are your insights/i)

@@ -344,7 +344,7 @@ describe('Integration: Export and ZIP Functionality', () => {
           .filter(f => f.startsWith(basePattern))
           .map(f => {
             const match = f.match(/_v(\d+)\./);
-            return match ? parseInt(match[1], 10) : 0;
+            return match ? parseInt(match[1]!, 10) : 0;
           })
           .filter(v => v > 0);
 
