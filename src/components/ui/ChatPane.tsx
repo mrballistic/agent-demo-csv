@@ -42,6 +42,8 @@ interface ChatPaneProps {
   queuePosition?: number;
   estimatedWaitTime?: number;
   isLoading?: boolean;
+  isConnected?: boolean;
+  connectionError?: string | null;
 }
 
 interface StreamEvent {
@@ -62,11 +64,11 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   queuePosition,
   estimatedWaitTime,
   isLoading = false,
+  isConnected = false,
+  connectionError = null,
 }) => {
   const [messages, setMessages] = useState<StreamingMessage[]>(initialMessages);
   const [inputValue, setInputValue] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [currentQueuePosition, setCurrentQueuePosition] = useState<
     number | undefined
@@ -78,7 +80,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  // EventSource connection is managed by useChat hook in parent component
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback((smooth = true) => {
@@ -180,135 +182,17 @@ const ChatPane: React.FC<ChatPaneProps> = ({
     setMessages(prev => [...prev, artifactMessage]);
   }, []);
 
-  // Handle different types of stream events
-  const handleStreamEvent = useCallback(
-    (event: StreamEvent) => {
-      switch (event.type) {
-        case 'connection.established':
-          setIsConnected(true);
-          setConnectionError(null);
-          break;
-
-        case 'run.started':
-          setCurrentQueuePosition(undefined);
-          setCurrentWaitTime(undefined);
-          break;
-
-        case 'run.queued':
-          setCurrentQueuePosition(event.data.queuePosition);
-          break;
-
-        case 'run.in_progress':
-          setCurrentQueuePosition(undefined);
-          setCurrentWaitTime(undefined);
-          break;
-
-        case 'message.delta':
-          handleMessageDelta(event.data);
-          break;
-
-        case 'message.completed':
-          handleMessageCompleted(event.data);
-          break;
-
-        case 'run.completed':
-          // Mark streaming as complete
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.isStreaming
-                ? { ...msg, isStreaming: false, isComplete: true }
-                : msg
-            )
-          );
-          setCurrentQueuePosition(undefined);
-          setCurrentWaitTime(undefined);
-          break;
-
-        case 'run.failed':
-          handleRunFailed(event.data);
-          setCurrentQueuePosition(undefined);
-          setCurrentWaitTime(undefined);
-          break;
-
-        case 'run.cancelled':
-          const cancelMessage: StreamingMessage = {
-            id: `cancelled_${Date.now()}`,
-            role: 'system',
-            content: 'Analysis was cancelled.',
-            timestamp: new Date(),
-            isComplete: true,
-          };
-          setMessages(prev => [...prev, cancelMessage]);
-          setCurrentQueuePosition(undefined);
-          setCurrentWaitTime(undefined);
-          break;
-
-        case 'artifact.created':
-          handleArtifactCreated(event.data);
-          break;
-
-        case 'error':
-          setConnectionError(event.data.error);
-          break;
-      }
-    },
-    [
-      handleMessageDelta,
-      handleMessageCompleted,
-      handleRunFailed,
-      handleArtifactCreated,
-    ]
-  );
-
-  // Handle SSE connection and streaming
+  // Update internal state when props change
   useEffect(() => {
-    if (!threadId) return;
+    setCurrentQueuePosition(queuePosition);
+  }, [queuePosition]);
 
-    const connectToStream = () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+  useEffect(() => {
+    setCurrentWaitTime(estimatedWaitTime);
+  }, [estimatedWaitTime]);
 
-      const eventSource = new EventSource(`/api/runs/${threadId}/stream`);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        setIsConnected(true);
-        setConnectionError(null);
-      };
-
-      eventSource.onmessage = event => {
-        try {
-          const streamEvent: StreamEvent = JSON.parse(event.data);
-          handleStreamEvent(streamEvent);
-        } catch (error) {
-          console.error('Failed to parse stream event:', error);
-        }
-      };
-
-      eventSource.onerror = error => {
-        console.error('SSE connection error:', error);
-        setIsConnected(false);
-        setConnectionError('Connection lost. Attempting to reconnect...');
-
-        // Attempt to reconnect after a delay
-        setTimeout(() => {
-          if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-            connectToStream();
-          }
-        }, 3000);
-      };
-    };
-
-    connectToStream();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [threadId, handleStreamEvent]);
+  // Handle SSE connection and streaming - REMOVED: useChat hook handles this
+  // The streaming connection is managed by the useChat hook in the parent component
 
   // Handle sending messages
   const handleSendMessage = useCallback(() => {

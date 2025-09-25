@@ -38,8 +38,12 @@ export class SessionStore {
   private sessions = new Map<string, SessionData>();
   private readonly TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   private cleanupInterval: NodeJS.Timeout;
+  private instanceId: string;
 
   constructor() {
+    this.instanceId = `store_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`SessionStore instance created: ${this.instanceId}`);
+
     // Run cleanup every 30 minutes
     this.cleanupInterval = setInterval(
       () => {
@@ -72,6 +76,9 @@ export class SessionStore {
     };
 
     this.sessions.set(sessionId, sessionData);
+    console.log(
+      `Session created: ${sessionId} for threadId: ${threadId}. Total sessions: ${this.sessions.size}`
+    );
     return sessionData;
   }
 
@@ -124,14 +131,23 @@ export class SessionStore {
    * Get session by thread ID
    */
   getSessionByThreadId(threadId: string): SessionData | null {
+    console.log(
+      `Looking for session with threadId: ${threadId}. Total sessions: ${this.sessions.size}`
+    );
+
     for (const session of this.sessions.values()) {
+      console.log(
+        `Checking session ${session.id} with threadId: ${session.threadId}`
+      );
       if (session.threadId === threadId && session.ttlExpiresAt > Date.now()) {
         // Update activity and return
         session.lastActivity = Date.now();
         session.ttlExpiresAt = Date.now() + this.TTL;
+        console.log(`Found matching session: ${session.id}`);
         return session;
       }
     }
+    console.log(`No session found for threadId: ${threadId}`);
     return null;
   }
 
@@ -199,4 +215,14 @@ export class SessionStore {
 }
 
 // Singleton instance
-export const sessionStore = new SessionStore();
+// Global singleton to prevent multiple instances during hot reload
+const globalForSessionStore = globalThis as unknown as {
+  sessionStore: SessionStore | undefined;
+};
+
+export const sessionStore =
+  globalForSessionStore.sessionStore ?? new SessionStore();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForSessionStore.sessionStore = sessionStore;
+}

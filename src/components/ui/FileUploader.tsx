@@ -26,6 +26,8 @@ import {
   DataObject,
   Warning,
   TrendingUp,
+  ExpandMore,
+  ExpandLess,
 } from '@mui/icons-material';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
@@ -71,6 +73,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   });
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isExpanded, setIsExpanded] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetUploadState = useCallback(() => {
@@ -169,8 +172,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         // Call success callback
         onFileUploaded(result);
 
-        // Reset after a short delay
-        setTimeout(resetUploadState, 2000);
+        // Collapse uploader after a short delay (but keep success state)
+        setTimeout(() => {
+          setIsExpanded(false);
+        }, 2000);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Upload failed';
@@ -185,7 +190,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         announceToScreenReader(`Upload failed: ${errorMessage}`, 'assertive');
       }
     },
-    [validateFile, onFileUploaded, onSystemMessage, resetUploadState]
+    [validateFile, onFileUploaded, onSystemMessage]
   );
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -266,6 +271,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     document.body.removeChild(link);
   }, []);
 
+  const handleToggleExpanded = useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
+
   const isDisabled = disabled || uploadState.isUploading;
 
   const sampleDatasets = [
@@ -301,142 +310,171 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   return (
     <Box>
-      <Paper
-        {...(className && { className })}
-        sx={{
-          p: 3,
-          border: 2,
-          borderStyle: 'dashed',
-          borderColor: dragActive
-            ? 'primary.main'
-            : uploadState.success
-              ? 'success.main'
-              : uploadState.error
-                ? 'error.main'
-                : 'divider',
-          bgcolor: dragActive
-            ? 'action.hover'
-            : uploadState.success
-              ? 'success.light'
-              : uploadState.error
-                ? 'error.light'
-                : 'background.paper',
-          transition: 'all 0.2s ease-in-out',
-          opacity: isDisabled ? 0.6 : 1,
-        }}
-        onDragEnter={handleDragIn}
-        onDragLeave={handleDragOut}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-          disabled={isDisabled}
-          aria-label="Choose CSV file"
-        />
+      {/* Title section with disclosure arrow */}
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="h6" component="h2" sx={{ color: 'text.primary' }}>
+          Upload Data
+        </Typography>
+        {uploadState.success && (
+          <Button
+            variant="text"
+            size="small"
+            onClick={handleToggleExpanded}
+            sx={{
+              minWidth: 'auto',
+              p: 0.5,
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+                bgcolor: 'transparent',
+              },
+            }}
+            aria-label={isExpanded ? 'Hide upload area' : 'Show upload area'}
+          >
+            {isExpanded ? <ExpandLess /> : <ExpandMore />}
+          </Button>
+        )}
+      </Box>
 
-        <Stack spacing={2} alignItems="center">
-          {uploadState.success ? (
-            <CheckCircle color="success" sx={{ fontSize: 48 }} />
-          ) : uploadState.error ? (
-            <ErrorIcon color="error" sx={{ fontSize: 48 }} />
-          ) : (
-            <CloudUpload
-              color={dragActive ? 'primary' : 'action'}
-              sx={{ fontSize: 48 }}
-            />
-          )}
-
-          <Typography
-            variant="h6"
-            color={
-              uploadState.success
+      {/* Upload widget - show if expanded or if no successful upload yet */}
+      {(isExpanded || !uploadState.success) && (
+        <Paper
+          {...(className && { className })}
+          sx={{
+            p: 3,
+            border: 2,
+            borderStyle: 'dashed',
+            borderColor: dragActive
+              ? 'primary.main'
+              : uploadState.success
                 ? 'success.main'
                 : uploadState.error
                   ? 'error.main'
-                  : 'text.primary'
-            }
-            align="center"
-          >
-            {uploadState.success
-              ? 'File uploaded successfully!'
-              : uploadState.error
-                ? 'Upload failed'
-                : dragActive
-                  ? 'Drop your CSV file here'
-                  : 'Upload CSV File'}
-          </Typography>
+                  : 'divider',
+            bgcolor: dragActive
+              ? 'action.hover'
+              : uploadState.success
+                ? 'success.light'
+                : uploadState.error
+                  ? 'error.light'
+                  : 'background.paper',
+            transition: 'all 0.2s ease-in-out',
+            opacity: isDisabled ? 0.6 : 1,
+          }}
+          onDragEnter={handleDragIn}
+          onDragLeave={handleDragOut}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+            disabled={isDisabled}
+            aria-label="Choose CSV file"
+          />
 
-          {!uploadState.success && !uploadState.error && (
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                id="upload-instructions"
-                sx={{ mb: 1 }}
-              >
-                Drag and drop your CSV file here, or click to browse
-              </Typography>
-              <Typography variant="caption" color="text.disabled">
-                Maximum file size: 50MB • Supported format: CSV
-                <br />
-                Required columns: order_date, qty, unit_price (or net_revenue)
-              </Typography>
-            </Box>
-          )}
-
-          {selectedFile && !uploadState.success && !uploadState.error && (
-            <Chip
-              icon={<InsertDriveFile />}
-              label={`${selectedFile.name} (${Math.round(selectedFile.size / 1024)}KB)`}
-              variant="outlined"
-              size="small"
-            />
-          )}
-
-          {uploadState.isUploading && (
-            <Box sx={{ width: '100%', maxWidth: 300 }}>
-              <LinearProgress
-                variant="determinate"
-                value={uploadState.progress}
-                sx={{ mb: 1 }}
-                aria-label={`Upload progress: ${uploadState.progress}%`}
+          <Stack spacing={2} alignItems="center">
+            {uploadState.success ? (
+              <CheckCircle color="success" sx={{ fontSize: 48 }} />
+            ) : uploadState.error ? (
+              <ErrorIcon color="error" sx={{ fontSize: 48 }} />
+            ) : (
+              <CloudUpload
+                color={dragActive ? 'primary' : 'action'}
+                sx={{ fontSize: 48 }}
               />
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                align="center"
-                role="status"
-                aria-live="polite"
-              >
-                Uploading... {uploadState.progress}%
-              </Typography>
-            </Box>
-          )}
-
-          {!uploadState.isUploading &&
-            !uploadState.success &&
-            !uploadState.error && (
-              <Button
-                variant="contained"
-                startIcon={<CloudUpload />}
-                disabled={isDisabled}
-                onClick={handleButtonClick}
-                aria-label="Choose CSV file to upload"
-                aria-describedby="upload-instructions"
-              >
-                Choose File
-              </Button>
             )}
-        </Stack>
-      </Paper>
+
+            <Typography
+              variant="h6"
+              color={
+                uploadState.success
+                  ? 'success.main'
+                  : uploadState.error
+                    ? 'error.main'
+                    : 'text.primary'
+              }
+              align="center"
+            >
+              {uploadState.success
+                ? 'File uploaded successfully!'
+                : uploadState.error
+                  ? 'Upload failed'
+                  : dragActive
+                    ? 'Drop your CSV file here'
+                    : 'Drag and drop your CSV file here'}
+            </Typography>
+
+            {!uploadState.success && !uploadState.error && (
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  id="upload-instructions"
+                  sx={{ mb: 1 }}
+                >
+                  Drag and drop your CSV file here, or click to browse
+                </Typography>
+                <Typography variant="caption" color="text.disabled">
+                  Maximum file size: 50MB • Supported format: CSV
+                  <br />
+                  Required columns: order_date, qty, unit_price (or net_revenue)
+                </Typography>
+              </Box>
+            )}
+
+            {selectedFile && !uploadState.success && !uploadState.error && (
+              <Chip
+                icon={<InsertDriveFile />}
+                label={`${selectedFile.name} (${Math.round(selectedFile.size / 1024)}KB)`}
+                variant="outlined"
+                size="small"
+              />
+            )}
+
+            {uploadState.isUploading && (
+              <Box sx={{ width: '100%', maxWidth: 300 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={uploadState.progress}
+                  sx={{ mb: 1 }}
+                  aria-label={`Upload progress: ${uploadState.progress}%`}
+                />
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  align="center"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Uploading... {uploadState.progress}%
+                </Typography>
+              </Box>
+            )}
+
+            {!uploadState.isUploading &&
+              !uploadState.success &&
+              !uploadState.error && (
+                <Button
+                  variant="contained"
+                  startIcon={<CloudUpload />}
+                  disabled={isDisabled}
+                  onClick={handleButtonClick}
+                  aria-label="Choose CSV file to upload"
+                  aria-describedby="upload-instructions"
+                >
+                  Choose File
+                </Button>
+              )}
+          </Stack>
+        </Paper>
+      )}
 
       {/* Sample Data Section */}
-      {showSampleData && !uploadState.success && (
+      {showSampleData && (isExpanded || !uploadState.success) && (
         <Box sx={{ mt: 3 }}>
           <Divider sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">

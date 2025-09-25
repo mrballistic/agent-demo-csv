@@ -52,6 +52,9 @@ export function useChat({
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
+  const handleStreamEventRef = useRef<((event: StreamEvent) => void) | null>(
+    null
+  );
 
   // Handle message deltas for streaming
   const handleMessageDelta = useCallback((data: any) => {
@@ -237,10 +240,24 @@ export function useChat({
     ]
   );
 
-  // Connect to SSE stream
-  const connectToStream = useCallback(() => {
-    if (!threadId) return;
+  // Update ref when handleStreamEvent changes
+  useEffect(() => {
+    handleStreamEventRef.current = handleStreamEvent;
+  }, [handleStreamEvent]);
 
+  // Set up SSE connection - inline to avoid dependency issues
+  useEffect(() => {
+    if (!threadId) {
+      // Cleanup when no threadId
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsConnected(false);
+      return;
+    }
+
+    // Close existing connection before creating new one
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
@@ -256,7 +273,7 @@ export function useChat({
     eventSource.onmessage = event => {
       try {
         const streamEvent: StreamEvent = JSON.parse(event.data);
-        handleStreamEvent(streamEvent);
+        handleStreamEventRef.current?.(streamEvent);
       } catch (error) {
         console.error('Failed to parse stream event:', error);
       }
@@ -276,13 +293,26 @@ export function useChat({
 
         // Attempt to reconnect after a delay
         setTimeout(() => {
-          if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-            connectToStream();
+          if (
+            eventSourceRef.current?.readyState === EventSource.CLOSED &&
+            threadId
+          ) {
+            const retryEventSource = new EventSource(
+              `/api/runs/${threadId}/stream`
+            );
+            eventSourceRef.current = retryEventSource;
           }
         }, 3000);
       }
     };
-  }, [threadId, handleStreamEvent]);
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [threadId]); // Only depend on threadId, not on handleStreamEvent
 
   // Send message
   const sendMessage = useCallback(
@@ -372,20 +402,6 @@ export function useChat({
   const addMessage = useCallback((message: ChatMessage) => {
     setMessages(prev => [...prev, message]);
   }, []);
-
-  // Set up SSE connection
-  useEffect(() => {
-    if (threadId) {
-      connectToStream();
-    }
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [threadId, connectToStream]);
 
   return {
     messages,
