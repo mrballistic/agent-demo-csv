@@ -114,7 +114,7 @@ describe('Profiling Workflow', () => {
     // Get messages (mocked to return manifest)
     const messages = await assistantManager.getMessages(thread.id);
     expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('assistant');
+    expect(messages[0]?.role).toBe('assistant');
   });
 
   it('should store artifacts from profiling', async () => {
