@@ -69,7 +69,7 @@
 
 ## Analysis Workflow
 
-- [ ] 9. Profiling workflow with streaming
+- [x] 9. Profiling workflow with streaming
   - Create POST /api/analysis/profile route (creates thread, message with CSV attachment, run)
   - Implement GET /api/runs/:threadId/stream SSE endpoint emitting run._ + message._ events
   - Add server-side artifact.created events when parsing new files
@@ -77,7 +77,7 @@
   - **DoD:** Chat shows "Profile created" + insight, Artifacts panel shows summary.md
   - _Requirements: 2.1, 2.2, 3.1, 3.2, 6.1, 6.2, 6.3_
 
-- [ ] 10. Chat interface with live updates
+- [-] 10. Chat interface with live updates
   - Create ChatPane with real-time updates from SSE
   - Implement optimistic user messages and scroll management
   - Add keyboard accessibility and smooth streaming delta rendering

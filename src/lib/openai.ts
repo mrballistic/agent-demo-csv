@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 // Initialize OpenAI client
 export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || 'demo-key-placeholder',
 });
 
 // Assistant configuration with system prompt
@@ -190,11 +190,7 @@ export class AssistantManager {
   async *streamRun(
     threadId: string,
     assistantId?: string
-  ): AsyncGenerator<
-    OpenAI.Beta.Threads.Runs.RunSubmitToolOutputsParams.ToolOutput | any,
-    void,
-    unknown
-  > {
+  ): AsyncGenerator<any, void, unknown> {
     try {
       const runAssistantId = assistantId || this.assistantId;
       if (!runAssistantId) {
@@ -217,6 +213,60 @@ export class AssistantManager {
     } catch (error) {
       throw new Error(
         `Failed to stream run: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Process streaming events and extract artifacts
+   */
+  async processStreamingRun(
+    threadId: string,
+    onEvent: (event: any) => void,
+    assistantId?: string
+  ): Promise<{ runId: string; manifest?: AnalysisManifest }> {
+    let runId = '';
+    let finalManifest: AnalysisManifest | undefined;
+
+    try {
+      for await (const event of this.streamRun(threadId, assistantId)) {
+        // Forward the event to the callback
+        onEvent(event);
+
+        // Track run ID
+        if (event.event === 'thread.run.created' && event.data?.id) {
+          runId = event.data.id;
+        }
+
+        // Process completed messages for manifest extraction
+        if (
+          event.event === 'thread.message.completed' &&
+          event.data?.role === 'assistant'
+        ) {
+          try {
+            const messages = await this.getMessages(threadId, 5);
+            const manifest = extractManifest(messages);
+            if (manifest) {
+              finalManifest = manifest;
+              // Emit custom artifact event
+              onEvent({
+                event: 'artifact.created',
+                data: {
+                  manifest,
+                  messageId: event.data.id,
+                },
+              });
+            }
+          } catch (error) {
+            console.warn('Failed to extract manifest:', error);
+          }
+        }
+      }
+
+      return finalManifest ? { runId, manifest: finalManifest } : { runId };
+    } catch (error) {
+      throw new Error(
+        `Failed to process streaming run: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
