@@ -221,6 +221,30 @@ export function ArtifactsPanel({
     };
   }, [artifacts, focusedIndex]);
 
+  // Handle keyboard navigation
+  const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        const nextIndex = (index + 1) % artifacts.length;
+        setFocusedIndex(nextIndex);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        const prevIndex = index === 0 ? artifacts.length - 1 : index - 1;
+        setFocusedIndex(prevIndex);
+        break;
+      case 'Home':
+        event.preventDefault();
+        setFocusedIndex(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        setFocusedIndex(artifacts.length - 1);
+        break;
+    }
+  };
+
   if (artifacts.length === 0) {
     return (
       <Box role="region" aria-labelledby="artifacts-heading">
@@ -289,7 +313,7 @@ export function ArtifactsPanel({
       </Box>
 
       <Paper sx={{ maxHeight: 300, overflow: 'auto' }}>
-        <List dense ref={listRef} role="list" aria-label="Generated artifacts">
+        <List dense ref={listRef} aria-label="Generated artifacts">
           {artifacts.map((artifact, index) => (
             <ListItem
               key={artifact.id}
@@ -298,9 +322,9 @@ export function ArtifactsPanel({
                 borderColor: 'divider',
                 '&:last-child': { borderBottom: 'none' },
               }}
-              role="listitem"
               tabIndex={index === focusedIndex ? 0 : -1}
               aria-describedby={`artifact-${artifact.id}-description`}
+              onKeyDown={event => handleKeyDown(event, index)}
             >
               <FormControlLabel
                 control={
@@ -317,34 +341,38 @@ export function ArtifactsPanel({
 
               {getArtifactIcon(artifact.type, artifact.mimeType)}
 
-              <ListItemText
-                primary={
-                  <Typography variant="body2" noWrap>
-                    {artifact.name}
-                  </Typography>
-                }
-                secondary={
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip
-                      label={artifact.type}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontSize: '0.7rem', height: 20 }}
-                      aria-label={`File type: ${artifact.type}`}
-                    />
-                    {artifact.size && (
-                      <Typography variant="caption" color="text.secondary">
-                        {formatFileSize(artifact.size)}
-                      </Typography>
-                    )}
-                    {artifact.createdAt && (
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDate(artifact.createdAt)}
-                      </Typography>
-                    )}
-                  </Stack>
-                }
-              />
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" noWrap>
+                  {artifact.name}
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 1,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    mt: 0.5,
+                  }}
+                >
+                  <Chip
+                    label={artifact.type}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem', height: 20 }}
+                    aria-label={`File type: ${artifact.type}`}
+                  />
+                  {artifact.size && (
+                    <Typography variant="caption" color="text.secondary">
+                      {formatFileSize(artifact.size)}
+                    </Typography>
+                  )}
+                  {artifact.createdAt && (
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(artifact.createdAt)}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
 
               {/* Hidden description for screen readers */}
               <Box sx={srOnlyStyles} id={`artifact-${artifact.id}-description`}>
@@ -380,16 +408,25 @@ export function ArtifactsPanel({
         onClose={() => !isExporting && setExportDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        aria-labelledby="export-dialog-title"
+        aria-describedby="export-dialog-description"
       >
-        <DialogTitle>Export Selected Artifacts</DialogTitle>
+        <DialogTitle id="export-dialog-title">
+          Export Selected Artifacts
+        </DialogTitle>
         <DialogContent>
           {exportError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2 }} role="alert">
               {exportError}
             </Alert>
           )}
 
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            paragraph
+            id="export-dialog-description"
+          >
             Export {selectedArtifacts.size} selected artifact
             {selectedArtifacts.size !== 1 ? 's' : ''} as a ZIP file with
             manifest.

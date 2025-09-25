@@ -21,14 +21,16 @@ export function generateChartAltText(manifest: {
   const analysisType = metadata?.analysis_type || 'analysis';
   const columns = metadata?.columns_used || [];
 
-  let altText = `Chart showing ${analysisType}`;
+  let altText = `Chart showing ${analysisType} analysis`;
 
   if (columns.length > 0) {
-    altText += ` using ${columns.join(', ')}`;
+    altText += ` based on ${columns.join(', ')} data`;
   }
 
   if (insight) {
-    altText += `. ${insight}`;
+    // Clean up the insight text for alt text
+    const cleanInsight = insight.replace(/\n/g, ' ').trim();
+    altText += `. Key finding: ${cleanInsight}`;
   }
 
   return altText;
@@ -45,6 +47,8 @@ export const KeyboardNavigation = {
     elements: HTMLElement[],
     currentIndex: number = 0
   ): (() => void) => {
+    if (elements.length === 0) return () => {};
+
     // Set initial tabindex values
     elements.forEach((element, index) => {
       element.tabIndex = index === currentIndex ? 0 : -1;

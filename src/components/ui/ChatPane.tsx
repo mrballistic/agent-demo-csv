@@ -617,8 +617,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                 bgcolor: 'background.paper',
               },
             }}
-            aria-label="Chat input"
-            aria-describedby="chat-input-help"
+            inputProps={{
+              'aria-label': 'Chat input',
+              'aria-describedby': 'chat-input-help',
+            }}
           />
           {isRunning ? (
             <IconButton

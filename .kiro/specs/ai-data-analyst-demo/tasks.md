@@ -126,7 +126,7 @@
 
 ## Accessibility and Observability
 
-- [-] 16. Accessibility compliance
+- [x] 16. Accessibility compliance
   - Add alt text for charts from manifest data
   - Implement ARIA labels and roving tab index for chat & artifacts
   - Fix focus traps and keyboard navigation

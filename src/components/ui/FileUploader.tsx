@@ -322,28 +322,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 ? 'error.light'
                 : 'background.paper',
           transition: 'all 0.2s ease-in-out',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
           opacity: isDisabled ? 0.6 : 1,
-          '&:hover': {
-            borderColor: isDisabled ? 'divider' : 'primary.main',
-            bgcolor: isDisabled ? 'background.paper' : 'action.hover',
-          },
         }}
         onDragEnter={handleDragIn}
         onDragLeave={handleDragOut}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        onClick={handleButtonClick}
-        role="button"
-        tabIndex={isDisabled ? -1 : 0}
-        aria-label="Upload CSV file"
-        aria-describedby="upload-instructions"
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleButtonClick();
-          }
-        }}
       >
         <input
           ref={fileInputRef}
@@ -442,6 +426,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 startIcon={<CloudUpload />}
                 disabled={isDisabled}
                 onClick={handleButtonClick}
+                aria-label="Choose CSV file to upload"
+                aria-describedby="upload-instructions"
               >
                 Choose File
               </Button>
@@ -465,14 +451,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   variant="outlined"
                   sx={{
                     height: '100%',
-                    cursor: 'pointer',
                     transition: 'all 0.2s ease-in-out',
                     '&:hover': {
                       boxShadow: 2,
                       borderColor: 'primary.main',
                     },
                   }}
-                  onClick={() => handleSampleDataDownload(dataset.filename)}
                 >
                   <CardContent sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -534,6 +518,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       fullWidth
                       variant="outlined"
                       sx={{ mt: 'auto' }}
+                      onClick={() => handleSampleDataDownload(dataset.filename)}
+                      aria-label={`Download ${dataset.name} sample data`}
                     >
                       Download Sample
                     </Button>
