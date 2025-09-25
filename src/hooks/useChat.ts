@@ -15,6 +15,7 @@ interface UseChatOptions {
   onRunStatusChange?: (
     status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   ) => void;
+  onQueueUpdate?: (position?: number, estimatedWaitTime?: number) => void;
 }
 
 interface UseChatReturn {
@@ -39,6 +40,7 @@ export function useChat({
   threadId,
   onArtifactCreated,
   onRunStatusChange,
+  onQueueUpdate,
 }: UseChatOptions = {}): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -147,6 +149,10 @@ export function useChat({
         case 'run.queued':
           setRunStatus('queued');
           onRunStatusChange?.('queued');
+          onQueueUpdate?.(
+            event.data.queuePosition,
+            event.data.estimatedWaitTime
+          );
           // Add queue position message if available
           if (event.data.queuePosition) {
             const queueMessage: ChatMessage = {
@@ -163,6 +169,7 @@ export function useChat({
           setIsRunning(true);
           setRunStatus('running');
           onRunStatusChange?.('running');
+          onQueueUpdate?.(undefined, undefined); // Clear queue info
           break;
 
         case 'message.delta':
@@ -178,6 +185,7 @@ export function useChat({
           setRunStatus('completed');
           currentRunIdRef.current = null;
           onRunStatusChange?.('completed');
+          onQueueUpdate?.(undefined, undefined); // Clear queue info
           break;
 
         case 'run.failed':
@@ -185,6 +193,7 @@ export function useChat({
           setRunStatus('failed');
           currentRunIdRef.current = null;
           onRunStatusChange?.('failed');
+          onQueueUpdate?.(undefined, undefined); // Clear queue info
           handleRunFailed(event.data);
           break;
 
@@ -193,6 +202,7 @@ export function useChat({
           setRunStatus('cancelled');
           currentRunIdRef.current = null;
           onRunStatusChange?.('cancelled');
+          onQueueUpdate?.(undefined, undefined); // Clear queue info
           const cancelMessage: ChatMessage = {
             id: `cancel_${Date.now()}`,
             role: 'system',
@@ -212,12 +222,14 @@ export function useChat({
           setIsRunning(false);
           setRunStatus('failed');
           onRunStatusChange?.('failed');
+          onQueueUpdate?.(undefined, undefined); // Clear queue info
           break;
       }
     },
     [
       onArtifactCreated,
       onRunStatusChange,
+      onQueueUpdate,
       handleMessageDelta,
       handleMessageCompleted,
       handleRunFailed,

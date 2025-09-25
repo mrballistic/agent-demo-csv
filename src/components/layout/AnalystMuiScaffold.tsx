@@ -15,7 +15,6 @@ import {
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { ReactNode, useState } from 'react';
-import ThemeToggle from './ThemeToggle';
 
 interface AnalystMuiScaffoldProps {
   children: ReactNode;
@@ -62,13 +61,11 @@ export default function AnalystMuiScaffold({
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             AI Data Analyst
           </Typography>
-          <ThemeToggle />
           <IconButton
             color="inherit"
             aria-label="toggle artifacts drawer"
             edge="end"
             onClick={handleDrawerToggle}
-            sx={{ ml: 1 }}
           >
             <MenuIcon />
           </IconButton>

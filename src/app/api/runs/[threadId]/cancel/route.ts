@@ -1,36 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assistantManager } from '@/lib/openai';
 import { sessionStore } from '@/lib/session-store';
+import { runQueue } from '@/lib/run-queue';
 
 export const runtime = 'nodejs';
-
-interface CancelRequest {
-  runId?: string;
-}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { threadId: string } }
 ) {
+  const { threadId } = params;
+
+  if (!threadId) {
+    return NextResponse.json(
+      { error: 'threadId is required' },
+      { status: 400 }
+    );
+  }
+
   try {
-    const { threadId } = params;
-
-    if (!threadId) {
-      return NextResponse.json(
-        { error: 'threadId is required' },
-        { status: 400 }
-      );
-    }
-
-    // Parse optional runId from body
-    let runId: string | undefined;
-    try {
-      const body: CancelRequest = await request.json();
-      runId = body.runId;
-    } catch {
-      // Body is optional for cancel requests
-    }
-
     // Find session by thread ID
     const session = sessionStore.getSessionByThreadId(threadId);
     if (!session) {
@@ -40,64 +28,59 @@ export async function POST(
       );
     }
 
+    // Get the current run ID from the queue or session
+    const currentRun = runQueue.getCurrentRun(threadId);
+
+    if (!currentRun) {
+      return NextResponse.json(
+        { error: 'No active run found for this thread' },
+        { status: 404 }
+      );
+    }
+
+    let cancelled = false;
+    let error: string | undefined;
+
     try {
       // Check if we have a real OpenAI API key
       const hasOpenAIKey =
         process.env.OPENAI_API_KEY &&
         process.env.OPENAI_API_KEY !== 'your-openai-api-key-here';
 
-      if (hasOpenAIKey && runId && !runId.startsWith('run_')) {
-        // Cancel real OpenAI run
-        const cancelledRun = await assistantManager.cancelRun(threadId, runId);
-
-        return NextResponse.json({
-          success: true,
-          runId: cancelledRun.id,
-          status: cancelledRun.status,
-          message: 'Run cancelled successfully',
-        });
-      } else {
-        // Handle demo mode cancellation
-        return NextResponse.json({
-          success: true,
-          runId: runId || `cancelled_${Date.now()}`,
-          status: 'cancelled',
-          message: 'Run cancelled (demo mode)',
-        });
-      }
-    } catch (error) {
-      console.error('Failed to cancel run:', error);
-
-      // Handle specific cancellation errors
-      if (error instanceof Error) {
-        if (error.message.includes('not found')) {
-          return NextResponse.json(
-            {
-              error: 'Run not found or already completed',
-              retryable: false,
-            },
-            { status: 404 }
-          );
-        } else if (error.message.includes('already')) {
-          return NextResponse.json({
-            success: true,
-            message: 'Run was already cancelled or completed',
-            status: 'cancelled',
-          });
-        }
+      if (hasOpenAIKey && currentRun.openaiRunId) {
+        // Cancel the actual OpenAI run
+        await assistantManager.cancelRun(threadId, currentRun.openaiRunId);
       }
 
-      return NextResponse.json(
-        {
-          error: 'Failed to cancel run',
-          details: error instanceof Error ? error.message : 'Unknown error',
-          retryable: true,
-        },
-        { status: 500 }
-      );
+      // Remove from queue and mark as cancelled
+      runQueue.cancelRun(currentRun.id);
+      cancelled = true;
+    } catch (cancelError) {
+      console.error('Failed to cancel OpenAI run:', cancelError);
+      error =
+        cancelError instanceof Error
+          ? cancelError.message
+          : 'Failed to cancel run';
+
+      // Still remove from our queue even if OpenAI cancellation failed
+      runQueue.cancelRun(currentRun.id);
+      cancelled = true;
     }
+
+    return NextResponse.json({
+      cancelled,
+      runId: currentRun.id,
+      threadId,
+      error,
+    });
   } catch (error) {
-    console.error('Cancel request failed:', error);
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    console.error('Cancel run error:', error);
+    return NextResponse.json(
+      {
+        error: 'Failed to cancel run',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
   }
 }

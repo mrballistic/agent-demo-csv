@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import crypto from 'crypto';
+import {
+  AppError,
+  ErrorFactory,
+  ErrorType,
+  classifyError,
+  createErrorTelemetry,
+} from '@/lib/error-handler';
+import { telemetryService, Telemetry } from '@/lib/telemetry';
 
 // Set runtime to nodejs for file handling
 export const runtime = 'nodejs';
@@ -182,14 +189,12 @@ function detectPII(columns: string[], sampleData: string[][]): PIIFlags {
 function validateCSVFile(buffer: Buffer, filename: string): void {
   // Check file size
   if (buffer.length > MAX_FILE_SIZE) {
-    throw new Error(
-      `File size exceeds 50MB limit. Current size: ${Math.round(buffer.length / 1024 / 1024)}MB`
-    );
+    throw ErrorFactory.fileTooLarge(buffer.length);
   }
 
   // Check file extension
   if (!filename.toLowerCase().endsWith('.csv')) {
-    throw new Error('File must have .csv extension. Please upload a CSV file.');
+    throw ErrorFactory.invalidFileFormat(filename);
   }
 
   // Basic content validation
@@ -197,30 +202,55 @@ function validateCSVFile(buffer: Buffer, filename: string): void {
   const text = buffer.toString(encoding);
 
   if (text.length === 0) {
-    throw new Error(
-      'File appears to be empty. Please upload a valid CSV file.'
-    );
+    throw ErrorFactory.emptyFile();
   }
 
   // Check if it looks like CSV content
   const lines = text.split('\n').filter(line => line.trim().length > 0);
   if (lines.length < 2) {
-    throw new Error(
-      'File must contain at least a header row and one data row.'
+    throw new AppError(
+      ErrorType.VALIDATION_ERROR,
+      'File must contain at least a header row and one data row',
+      {
+        errorClass: 'insufficient_data_rows',
+        suggestedAction: 'Please upload a CSV file with header and data rows',
+        details: { lineCount: lines.length },
+      }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let sessionId: string | undefined;
+  let errorClass: string | undefined;
+
   try {
+    // Extract request context for telemetry
+    const userAgent = request.headers.get('user-agent') || undefined;
+    const requestId =
+      request.headers.get('x-request-id') || `req_${Date.now()}`;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided. Please select a CSV file to upload.' },
-        { status: 400 }
+      const error = new AppError(
+        ErrorType.VALIDATION_ERROR,
+        'No file provided. Please select a CSV file to upload.',
+        {
+          errorClass: 'no_file_provided',
+          suggestedAction: 'Select a CSV file and try again',
+        }
       );
+
+      telemetryService.logError(createErrorTelemetry(error, 'file_upload'), {
+        userAgent,
+        requestId,
+        endpoint: '/api/files/upload',
+      });
+
+      return NextResponse.json(error.toErrorResponse(), { status: 400 });
     }
 
     // Convert file to buffer
@@ -262,6 +292,9 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    // Track successful file upload
+    Telemetry.trackFileUpload(buffer.length, file.name, fileId, true);
+
     // TODO: Store file and metadata (will be implemented in storage tasks)
     // For now, we'll just return the metadata
 
@@ -275,13 +308,40 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('File upload error:', error);
 
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    // Classify and handle the error
+    const appError = error instanceof AppError ? error : classifyError(error);
+    errorClass = appError.errorClass;
+
+    // Log error telemetry
+    telemetryService.logError(createErrorTelemetry(appError, 'file_upload'), {
+      sessionId,
+      userAgent: request.headers.get('user-agent') || undefined,
+      requestId: request.headers.get('x-request-id') || `req_${Date.now()}`,
+      endpoint: '/api/files/upload',
+      stackTrace: error instanceof Error ? error.stack : undefined,
+    });
+
+    // Track failed file upload
+    const filename = 'unknown';
+    try {
+      const formData = await request.formData();
+      const file = formData.get('file') as File;
+      if (file) {
+        Telemetry.trackFileUpload(
+          file.size,
+          file.name,
+          'failed',
+          false,
+          errorClass
+        );
+      }
+    } catch {
+      // Ignore errors when trying to extract file info for telemetry
     }
 
-    return NextResponse.json(
-      { error: 'An unexpected error occurred while processing the file.' },
-      { status: 500 }
-    );
+    const statusCode = appError.type === ErrorType.VALIDATION_ERROR ? 400 : 500;
+    return NextResponse.json(appError.toErrorResponse(), {
+      status: statusCode,
+    });
   }
 }

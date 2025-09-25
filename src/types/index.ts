@@ -72,7 +72,9 @@ export interface ColumnInfo {
 export interface ArtifactItem {
   id: string;
   name: string;
-  kind: 'file' | 'image' | 'data';
+  type: 'file' | 'image' | 'data';
   size?: number;
   downloadUrl: string;
+  createdAt?: number;
+  mimeType?: string;
 }

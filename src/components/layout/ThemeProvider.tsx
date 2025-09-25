@@ -5,76 +5,50 @@ import {
   ThemeProvider as MuiThemeProvider,
 } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import {
-  ReactNode,
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-
-type ThemeMode = 'light' | 'dark' | 'system';
-
-interface ThemeContextType {
-  mode: ThemeMode;
-  setMode: (mode: ThemeMode) => void;
-  effectiveDark: boolean;
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
-
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
-};
+import { ReactNode, useEffect, useState } from 'react';
 
 interface ThemeProviderProps {
   children: ReactNode;
 }
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
-  const [mode, setModeState] = useState<ThemeMode>('system');
-  const [effectiveDark, setEffectiveDark] = useState(false);
-
-  // Initialize theme from localStorage and system preference
-  useEffect(() => {
-    const savedMode = localStorage.getItem('theme-mode') as ThemeMode;
-    if (savedMode && ['light', 'dark', 'system'].includes(savedMode)) {
-      setModeState(savedMode);
+  // Use a more reliable detection method
+  const [effectiveDark, setEffectiveDark] = useState<boolean>(() => {
+    // Only run on client-side
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-  }, []);
+    return false; // Default to light on server
+  });
+  const [mounted, setMounted] = useState(false);
 
-  // Update effective dark mode based on current mode and system preference
+  // Always use system theme preference
   useEffect(() => {
+    setMounted(true);
+
     const updateEffectiveDark = () => {
-      if (mode === 'system') {
-        setEffectiveDark(
-          window.matchMedia('(prefers-color-scheme: dark)').matches
-        );
-      } else {
-        setEffectiveDark(mode === 'dark');
-      }
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      console.log('System theme detected:', isDark ? 'dark' : 'light'); // Debug log
+      setEffectiveDark(isDark);
     };
 
+    // Ensure we have the correct initial value
     updateEffectiveDark();
 
-    if (mode === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      mediaQuery.addEventListener('change', updateEffectiveDark);
-      return () =>
-        mediaQuery.removeEventListener('change', updateEffectiveDark);
-    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', updateEffectiveDark);
+    return () => mediaQuery.removeEventListener('change', updateEffectiveDark);
+  }, []);
 
-    return undefined;
-  }, [mode]);
-
-  const setMode = (newMode: ThemeMode) => {
-    setModeState(newMode);
-    localStorage.setItem('theme-mode', newMode);
-  };
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return (
+      <MuiThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
+        <CssBaseline />
+        {children}
+      </MuiThemeProvider>
+    );
+  }
 
   const theme = createTheme({
     palette: {
@@ -112,18 +86,10 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
     },
   });
 
-  const contextValue: ThemeContextType = {
-    mode,
-    setMode,
-    effectiveDark,
-  };
-
   return (
-    <ThemeContext.Provider value={contextValue}>
-      <MuiThemeProvider theme={theme}>
-        <CssBaseline />
-        {children}
-      </MuiThemeProvider>
-    </ThemeContext.Provider>
+    <MuiThemeProvider theme={theme}>
+      <CssBaseline />
+      {children}
+    </MuiThemeProvider>
   );
 }

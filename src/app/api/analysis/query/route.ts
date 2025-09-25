@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assistantManager } from '@/lib/openai';
 import { sessionStore } from '@/lib/session-store';
+import { runQueue, QueuedRun } from '@/lib/run-queue';
+import {
+  AppError,
+  ErrorFactory,
+  ErrorType,
+  defaultRetryHandler,
+  classifyError,
+  createErrorTelemetry,
+} from '@/lib/error-handler';
+import { telemetryService, Telemetry } from '@/lib/telemetry';
+import {
+  getIdempotencyKey,
+  validateIdempotencyKey,
+  withIdempotency,
+} from '@/lib/idempotency';
 
 export const runtime = 'nodejs';
 
@@ -10,102 +25,120 @@ interface QueryRequest {
   fileId?: string;
 }
 
-interface ErrorResponse {
-  error: string;
-  type:
-    | 'user_error'
-    | 'system_error'
-    | 'timeout_error'
-    | 'validation_error'
-    | 'api_error';
-  retryable: boolean;
-  suggestedAction?: string;
-}
-
 // Budget enforcement constants
 const HARD_TIMEOUT_MS = 90 * 1000; // 90 seconds
 const GOAL_TIMEOUT_MS = 15 * 1000; // 15 seconds for ≤100k rows
-const MAX_CONCURRENT_RUNS = 10;
-
-// Simple in-memory run queue
-const runQueue: Array<{ runId: string; threadId: string; startTime: number }> =
-  [];
-const activeRuns = new Map<
-  string,
-  { threadId: string; startTime: number; timeoutId: NodeJS.Timeout }
->();
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let sessionId: string | undefined;
+  let errorClass: string | undefined;
+
   try {
     const body: QueryRequest = await request.json();
     const { threadId, query, fileId } = body;
 
+    // Extract request context for telemetry
+    const userAgent = request.headers.get('user-agent') || undefined;
+    const requestId =
+      request.headers.get('x-request-id') || `req_${Date.now()}`;
+
     if (!threadId || !query) {
-      return NextResponse.json(
+      const error = new AppError(
+        ErrorType.VALIDATION_ERROR,
+        'threadId and query are required',
         {
-          error: 'threadId and query are required',
-          type: 'validation_error',
-          retryable: false,
-        } as ErrorResponse,
-        { status: 400 }
+          errorClass: 'missing_required_fields',
+          details: { hasThreadId: !!threadId, hasQuery: !!query },
+        }
       );
+
+      telemetryService.logError(createErrorTelemetry(error, 'analysis_query'), {
+        userAgent,
+        requestId,
+        endpoint: '/api/analysis/query',
+      });
+
+      return NextResponse.json(error.toErrorResponse(), { status: 400 });
     }
 
     // Check for idempotency key to prevent duplicate runs
-    const idempotencyKey = request.headers.get('Idempotency-Key');
-    if (idempotencyKey) {
-      // Check if we've already processed this request
-      const existingRun = Array.from(activeRuns.values()).find(
-        run => run.threadId === threadId
+    const idempotencyKey = getIdempotencyKey(request);
+    if (idempotencyKey && !validateIdempotencyKey(idempotencyKey)) {
+      const error = new AppError(
+        ErrorType.VALIDATION_ERROR,
+        'Invalid idempotency key format',
+        {
+          errorClass: 'invalid_idempotency_key',
+          suggestedAction:
+            'Use alphanumeric characters, hyphens, and underscores only (1-255 chars)',
+          details: { providedKey: idempotencyKey },
+        }
       );
-      if (existingRun) {
-        return NextResponse.json({
-          success: true,
-          runId: `existing_${Date.now()}`,
-          message: 'Run already in progress',
-          status: 'in_progress',
-        });
-      }
+
+      telemetryService.logError(createErrorTelemetry(error, 'analysis_query'), {
+        userAgent,
+        requestId,
+        endpoint: '/api/analysis/query',
+      });
+
+      return NextResponse.json(error.toErrorResponse(), { status: 400 });
     }
 
     // Find session by thread ID
     const session = sessionStore.getSessionByThreadId(threadId);
     if (!session) {
-      return NextResponse.json(
-        {
-          error: 'Session not found or expired',
-          type: 'user_error',
-          retryable: false,
-          suggestedAction: 'Please upload a file to start a new session',
-        } as ErrorResponse,
-        { status: 404 }
-      );
+      const error = ErrorFactory.sessionNotFound();
+
+      telemetryService.logError(createErrorTelemetry(error, 'analysis_query'), {
+        threadId,
+        userAgent,
+        requestId,
+        endpoint: '/api/analysis/query',
+      });
+
+      return NextResponse.json(error.toErrorResponse(), { status: 404 });
     }
 
-    // Check queue capacity
-    if (activeRuns.size >= MAX_CONCURRENT_RUNS) {
-      const queuePosition = runQueue.length + 1;
-      const estimatedWaitTime = Math.ceil(
-        (queuePosition * 30) / MAX_CONCURRENT_RUNS
-      ); // Estimate 30s per run
+    sessionId = session.id;
 
-      return NextResponse.json(
-        {
-          error: 'Too many concurrent analyses. You are queued.',
-          type: 'system_error',
-          retryable: true,
-          suggestedAction:
-            'Wait for your turn or cancel other running analyses',
-          queuePosition,
-          estimatedWaitTime,
-        } as ErrorResponse,
-        {
-          status: 429,
-          headers: {
-            'Retry-After': estimatedWaitTime.toString(),
-          },
-        }
+    // Check queue capacity and enqueue the run
+    const queueParams: Omit<
+      QueuedRun,
+      'id' | 'queuedAt' | 'status' | 'retryCount' | 'maxRetries'
+    > = {
+      threadId,
+      sessionId: session.id,
+      query,
+      priority: 'normal',
+    };
+
+    if (fileId) {
+      queueParams.fileId = fileId;
+    }
+
+    const queueResult = runQueue.enqueue(queueParams);
+
+    if (!queueResult.accepted) {
+      const error = ErrorFactory.queueLimitReached(
+        0, // No position since rejected
+        queueResult.retryAfter || 60
       );
+
+      telemetryService.logError(createErrorTelemetry(error, 'analysis_query'), {
+        sessionId,
+        threadId,
+        userAgent,
+        requestId,
+        endpoint: '/api/analysis/query',
+      });
+
+      return NextResponse.json(error.toErrorResponse(), {
+        status: 429,
+        headers: {
+          'Retry-After': (queueResult.retryAfter || 60).toString(),
+        },
+      });
     }
 
     // Update session activity
@@ -123,126 +156,110 @@ export async function POST(request: NextRequest) {
       timeoutMs = GOAL_TIMEOUT_MS;
     }
 
+    // Track analysis request
+    Telemetry.trackAnalysisRequest('query', sessionId, threadId, fileId);
+
     try {
-      // Check if we have a real OpenAI API key
-      const hasOpenAIKey =
-        process.env.OPENAI_API_KEY &&
-        process.env.OPENAI_API_KEY !== 'your-openai-api-key-here';
+      // Execute with idempotency support
+      const result = await withIdempotency(async () => {
+        // Use retry handler for OpenAI operations
+        return await defaultRetryHandler.executeWithRetry(async () => {
+          const runId = queueResult.runId;
 
-      const runId = `run_${Date.now()}`;
-      const startTime = Date.now();
+          // Return queue information immediately
+          // The actual execution will be handled by the queue processor and streaming endpoint
+          return {
+            success: true,
+            runId,
+            message:
+              queueResult.queuePosition === 1
+                ? 'Analysis starting...'
+                : `Analysis queued (position ${queueResult.queuePosition})`,
+            status: 'queued',
+            queuePosition: queueResult.queuePosition,
+            estimatedWaitTime: queueResult.estimatedWaitTime,
+            timeoutMs,
+            estimatedDuration:
+              timeoutMs === GOAL_TIMEOUT_MS ? '15 seconds' : '90 seconds',
+          };
+        }, 'analysis_query');
+      }, idempotencyKey);
 
-      if (hasOpenAIKey) {
-        // Use real OpenAI API
-        await assistantManager.createMessage(threadId, query, fileId);
-        const run = await assistantManager.createRun(threadId);
+      // Track successful analysis start
+      const duration = Date.now() - startTime;
+      Telemetry.trackAnalysisCompletion(
+        'query',
+        duration,
+        sessionId,
+        threadId,
+        true
+      );
 
-        // Set up timeout enforcement
-        const timeoutId = setTimeout(() => {
-          handleRunTimeout(run.id, threadId);
-        }, timeoutMs);
-
-        // Track active run
-        activeRuns.set(run.id, { threadId, startTime, timeoutId });
-
-        return NextResponse.json({
-          success: true,
-          runId: run.id,
-          message: 'Analysis started',
-          status: 'queued',
-          timeoutMs,
-          estimatedDuration:
-            timeoutMs === GOAL_TIMEOUT_MS ? '15 seconds' : '90 seconds',
-        });
-      } else {
-        // Simulate for demo with timeout tracking
-        const timeoutId = setTimeout(() => {
-          handleRunTimeout(runId, threadId);
-        }, timeoutMs);
-
-        // Track simulated run
-        activeRuns.set(runId, { threadId, startTime, timeoutId });
-
-        return NextResponse.json({
-          success: true,
-          runId,
-          message: 'Analysis started (demo mode)',
-          status: 'queued',
-          timeoutMs,
-          estimatedDuration:
-            timeoutMs === GOAL_TIMEOUT_MS ? '15 seconds' : '90 seconds',
-        });
-      }
+      return NextResponse.json(result);
     } catch (error) {
       console.error('Analysis query failed:', error);
 
-      // Categorize errors
-      let errorResponse: ErrorResponse;
+      // Classify and handle the error
+      const appError = classifyError(error);
+      errorClass = appError.errorClass;
 
-      if (error instanceof Error) {
-        if (
-          error.message.includes('rate limit') ||
-          error.message.includes('quota')
-        ) {
-          errorResponse = {
-            error: 'OpenAI API rate limit exceeded. Please try again later.',
-            type: 'api_error',
-            retryable: true,
-            suggestedAction: 'Wait a few minutes and try again',
-          };
-        } else if (error.message.includes('timeout')) {
-          errorResponse = {
-            error:
-              'Analysis timed out. Try with a smaller dataset or simpler query.',
-            type: 'timeout_error',
-            retryable: true,
-            suggestedAction: 'Reduce data size or simplify your question',
-          };
-        } else if (error.message.includes('missing columns')) {
-          errorResponse = {
-            error: 'Required columns are missing from your data.',
-            type: 'user_error',
-            retryable: true,
-            suggestedAction: 'Check your data format or use column mapping',
-          };
-        } else {
-          errorResponse = {
-            error: 'Analysis failed due to a system error.',
-            type: 'system_error',
-            retryable: true,
-            suggestedAction:
-              'Please try again or contact support if this persists',
-          };
+      // Log error telemetry
+      telemetryService.logError(
+        createErrorTelemetry(appError, 'analysis_query'),
+        {
+          sessionId,
+          threadId,
+          userAgent,
+          requestId,
+          endpoint: '/api/analysis/query',
+          stackTrace: error instanceof Error ? error.stack : undefined,
         }
-      } else {
-        errorResponse = {
-          error: 'Unknown error occurred',
-          type: 'system_error',
-          retryable: true,
-        };
-      }
+      );
 
-      return NextResponse.json(errorResponse, { status: 500 });
+      // Track failed analysis
+      const duration = Date.now() - startTime;
+      Telemetry.trackAnalysisCompletion(
+        'query',
+        duration,
+        sessionId,
+        threadId,
+        false,
+        errorClass
+      );
+
+      return NextResponse.json(appError.toErrorResponse(), { status: 500 });
     }
   } catch (error) {
     console.error('Request parsing failed:', error);
-    return NextResponse.json(
+
+    const appError = new AppError(
+      ErrorType.VALIDATION_ERROR,
+      'Invalid request format',
       {
-        error: 'Invalid request format',
-        type: 'validation_error',
-        retryable: false,
+        errorClass: 'request_parsing_failed',
         suggestedAction: 'Check your request format and try again',
-      } as ErrorResponse,
-      { status: 400 }
+        ...(error instanceof Error && { cause: error }),
+      }
     );
+
+    // Log parsing error
+    telemetryService.logError(
+      createErrorTelemetry(appError, 'analysis_query'),
+      {
+        sessionId,
+        userAgent: request.headers.get('user-agent') || undefined,
+        requestId: request.headers.get('x-request-id') || `req_${Date.now()}`,
+        endpoint: '/api/analysis/query',
+        stackTrace: error instanceof Error ? error.stack : undefined,
+      }
+    );
+
+    return NextResponse.json(appError.toErrorResponse(), { status: 400 });
   }
 }
 
 // Handle run timeout
 async function handleRunTimeout(runId: string, threadId: string) {
-  const activeRun = activeRuns.get(runId);
-  if (!activeRun) return;
-
   try {
     // Try to cancel the run if it's a real OpenAI run
     const hasOpenAIKey =
@@ -253,23 +270,8 @@ async function handleRunTimeout(runId: string, threadId: string) {
       await assistantManager.cancelRun(threadId, runId);
     }
 
-    console.log(
-      `Run ${runId} timed out after ${Date.now() - activeRun.startTime}ms`
-    );
+    console.log(`Run ${runId} timed out`);
   } catch (error) {
     console.error('Failed to cancel timed out run:', error);
-  } finally {
-    // Clean up tracking
-    clearTimeout(activeRun.timeoutId);
-    activeRuns.delete(runId);
-  }
-}
-
-// Clean up completed runs (called from streaming endpoint)
-export function cleanupRun(runId: string) {
-  const activeRun = activeRuns.get(runId);
-  if (activeRun) {
-    clearTimeout(activeRun.timeoutId);
-    activeRuns.delete(runId);
   }
 }

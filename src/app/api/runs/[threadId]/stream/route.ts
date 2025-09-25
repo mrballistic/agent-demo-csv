@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { assistantManager, extractManifest } from '@/lib/openai';
 import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
-import { cleanupRun } from '../../../analysis/query/route';
+import { runQueue } from '@/lib/run-queue';
+import { cleanupRun } from '@/lib/run-cleanup';
 
 export const runtime = 'nodejs';
 
@@ -163,19 +164,22 @@ async function streamRealOpenAIRun(
             break;
 
           case 'thread.run.queued':
+            const queuePosition = runQueue.getQueuePosition(runId) || 1;
             send({
               type: 'run.queued',
               data: {
                 runId: event.data.id,
                 threadId,
                 status: 'queued',
-                queuePosition: 1, // Could be enhanced with real queue tracking
+                queuePosition,
               },
               timestamp,
             });
             break;
 
           case 'thread.run.in_progress':
+            // Mark run as started in queue
+            runQueue.markRunStarted(runId, event.data.id);
             send({
               type: 'run.in_progress',
               data: {
@@ -189,6 +193,8 @@ async function streamRealOpenAIRun(
             break;
 
           case 'thread.run.completed':
+            // Mark run as completed in queue
+            runQueue.markRunCompleted(runId, true);
             send({
               type: 'run.completed',
               data: {
@@ -206,6 +212,9 @@ async function streamRealOpenAIRun(
           case 'thread.run.failed':
             const errorMessage = event.data.last_error?.message || 'Run failed';
             const errorType = categorizeError(errorMessage);
+
+            // Mark run as failed in queue
+            runQueue.markRunCompleted(runId, false, errorMessage);
 
             send({
               type: 'run.failed',
@@ -225,6 +234,9 @@ async function streamRealOpenAIRun(
             break;
 
           case 'thread.run.cancelled':
+            // Mark run as cancelled in queue
+            runQueue.cancelRun(runId);
+
             send({
               type: 'run.cancelled',
               data: {

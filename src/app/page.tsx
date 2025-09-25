@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { AnalystMuiScaffold } from '@/components/layout';
-import { ChatPane, FileUploader, QuickActions } from '@/components/ui';
+import {
+  ChatPane,
+  FileUploader,
+  QuickActions,
+  ArtifactsPanel,
+} from '@/components/ui';
 import RunStatusChip from '@/components/ui/RunStatusChip';
 import { useChat } from '@/hooks';
 import {
@@ -15,18 +20,21 @@ import {
   Chip,
 } from '@mui/material';
 import { CloudUpload, Chat } from '@mui/icons-material';
-import { ChatMessage } from '@/types';
+import { ChatMessage, ArtifactItem } from '@/types';
 
 export default function Home() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [hasUploadedFile, setHasUploadedFile] = useState(false);
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
-  const [artifacts, setArtifacts] = useState<any[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [runStatus, setRunStatus] = useState<
     'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   >('idle');
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [queuePosition, setQueuePosition] = useState<number | undefined>();
+  const [estimatedWaitTime, setEstimatedWaitTime] = useState<
+    number | undefined
+  >();
 
   const {
     messages,
@@ -42,10 +50,26 @@ export default function Home() {
       ? {
           threadId,
           onArtifactCreated: artifact => {
-            setArtifacts(prev => [...prev, artifact]);
+            const artifactItem: ArtifactItem = {
+              id: artifact.artifactId,
+              name: artifact.filename,
+              type:
+                artifact.type === 'image'
+                  ? 'image'
+                  : artifact.type === 'data'
+                    ? 'data'
+                    : 'file',
+              downloadUrl: artifact.downloadUrl,
+              createdAt: Date.now(),
+            };
+            setArtifacts(prev => [...prev, artifactItem]);
           },
           onRunStatusChange: status => {
             setRunStatus(status);
+          },
+          onQueueUpdate: (position, waitTime) => {
+            setQueuePosition(position);
+            setEstimatedWaitTime(waitTime);
           },
         }
       : {}
@@ -159,6 +183,7 @@ export default function Home() {
               status={hookRunStatus}
               elapsedTime={elapsedTime}
               {...(queuePosition !== undefined && { queuePosition })}
+              {...(estimatedWaitTime !== undefined && { estimatedWaitTime })}
               onRetry={handleRetryAnalysis}
               onCancel={cancelRun}
             />
@@ -204,22 +229,10 @@ export default function Home() {
                 />
 
                 {/* Artifacts */}
-                {artifacts.length > 0 && (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Generated Files
-                    </Typography>
-                    <Stack spacing={1}>
-                      {artifacts.map((artifact, index) => (
-                        <Paper key={index} sx={{ p: 1 }}>
-                          <Typography variant="body2" noWrap>
-                            📄 {artifact.filename}
-                          </Typography>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
+                <ArtifactsPanel
+                  artifacts={artifacts}
+                  threadId={threadId ?? undefined}
+                />
               </Stack>
             </Grid>
 
@@ -246,6 +259,10 @@ export default function Home() {
                     disabled={!hasUploadedFile}
                     isRunning={isRunning}
                     fileId={currentFileId}
+                    {...(queuePosition !== undefined && { queuePosition })}
+                    {...(estimatedWaitTime !== undefined && {
+                      estimatedWaitTime,
+                    })}
                   />
                 ) : (
                   <Paper

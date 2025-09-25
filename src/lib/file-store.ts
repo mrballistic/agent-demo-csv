@@ -54,10 +54,15 @@ export class FileStore {
     const sessionDir = path.join(this.baseDir, sessionId);
     await fs.mkdir(sessionDir, { recursive: true });
 
-    // Generate unique filename to avoid conflicts
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const uniqueFilename = `${timestamp}_${filename}`;
-    const filePath = path.join(sessionDir, uniqueFilename);
+    // Use the filename as-is for artifacts (already formatted by storeArtifact)
+    // Only add timestamp prefix for regular file uploads
+    let finalFilename = filename;
+    if (!filename.match(/_\d{8}_\d{6}_v\d+\./)) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      finalFilename = `${timestamp}_${filename}`;
+    }
+
+    const filePath = path.join(sessionDir, finalFilename);
 
     // Write file to disk
     await fs.writeFile(filePath, content);
@@ -65,7 +70,7 @@ export class FileStore {
     const metadata: FileMetadata = {
       id: fileId,
       sessionId,
-      filename: uniqueFilename,
+      filename: finalFilename,
       originalName: filename,
       size: content.length,
       checksum,
@@ -81,6 +86,7 @@ export class FileStore {
 
   /**
    * Store an artifact with versioning
+   * Format: analysisType_YYYYMMDD_HHMMSS_vN.ext
    */
   async storeArtifact(
     sessionId: string,
@@ -88,11 +94,28 @@ export class FileStore {
     content: Buffer,
     extension: string = 'bin'
   ): Promise<FileMetadata> {
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, '-')
-      .slice(0, 19);
-    const filename = `${artifactType}_${timestamp}.${extension}`;
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const timeStr = now.toISOString().slice(11, 19).replace(/:/g, ''); // HHMMSS
+
+    // Find existing versions for this artifact type and date/time
+    // We need to check both in-memory files and potentially existing files on disk
+    const existingFiles = Array.from(this.files.values()).filter(
+      f => f.sessionId === sessionId
+    );
+
+    const basePattern = `${artifactType}_${dateStr}_${timeStr}`;
+    const existingVersions = existingFiles
+      .filter(f => f.filename.startsWith(basePattern))
+      .map(f => {
+        const match = f.filename.match(/_v(\d+)\./);
+        return match && match[1] ? parseInt(match[1], 10) : 0;
+      })
+      .filter(v => v > 0); // Filter out invalid matches
+
+    const nextVersion =
+      existingVersions.length > 0 ? Math.max(...existingVersions) + 1 : 1;
+    const filename = `${artifactType}_${dateStr}_${timeStr}_v${nextVersion}.${extension}`;
 
     return this.storeFile(
       sessionId,

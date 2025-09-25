@@ -110,14 +110,14 @@
 
 ## Error Handling and Resilience
 
-- [ ] 14. Robust error handling and retries
+- [🔄] 14. Robust error handling and retries
   - Implement error taxonomy: VALIDATION_ERROR, USER_ERROR, API_ERROR, TIMEOUT_ERROR, SYSTEM_ERROR
   - Add exponential backoff for transient OpenAI errors
   - Support Idempotency-Key header on analysis POSTs
   - **DoD:** Each error shows friendly copy + suggested action, telemetry records error_class
   - _Requirements: 8.4, 8.6, 3.6_
 
-- [-] 15. Run cancellation and queue management
+- [ ] 15. Run cancellation and queue management
   - Create POST /api/runs/:threadId/cancel route forwarding to OpenAI
   - Implement simple FIFO queue (in-memory) with max depth
   - Add UI queue position display and 429 responses with Retry-After

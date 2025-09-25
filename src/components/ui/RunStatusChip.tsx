@@ -15,6 +15,7 @@ interface RunStatusChipProps {
   status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   elapsedTime?: number;
   queuePosition?: number;
+  estimatedWaitTime?: number;
   onRetry?: () => void;
   onCancel?: () => void;
   className?: string;
@@ -24,6 +25,7 @@ const RunStatusChip: React.FC<RunStatusChipProps> = ({
   status,
   elapsedTime,
   queuePosition,
+  estimatedWaitTime,
   onRetry,
   onCancel,
   className,
@@ -38,8 +40,16 @@ const RunStatusChip: React.FC<RunStatusChipProps> = ({
           variant: 'outlined' as const,
         };
       case 'queued':
+        let queueLabel = 'Queued';
+        if (queuePosition) {
+          queueLabel += ` (#${queuePosition})`;
+          if (estimatedWaitTime) {
+            const waitSeconds = Math.ceil(estimatedWaitTime / 1000);
+            queueLabel += ` - ${waitSeconds}s`;
+          }
+        }
         return {
-          label: queuePosition ? `Queued (#${queuePosition})` : 'Queued',
+          label: queueLabel,
           color: 'info' as const,
           icon: <HourglassEmpty />,
           variant: 'filled' as const,

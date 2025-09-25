@@ -37,6 +37,8 @@ interface ChatPaneProps {
   disabled?: boolean;
   isRunning?: boolean;
   fileId?: string | null;
+  queuePosition?: number;
+  estimatedWaitTime?: number;
 }
 
 interface StreamEvent {
@@ -54,12 +56,20 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   disabled = false,
   isRunning = false,
   fileId,
+  queuePosition,
+  estimatedWaitTime,
 }) => {
   const [messages, setMessages] = useState<StreamingMessage[]>(initialMessages);
   const [inputValue, setInputValue] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [currentQueuePosition, setCurrentQueuePosition] = useState<
+    number | undefined
+  >(queuePosition);
+  const [currentWaitTime, setCurrentWaitTime] = useState<number | undefined>(
+    estimatedWaitTime
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -173,8 +183,17 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           break;
 
         case 'run.started':
+          setCurrentQueuePosition(undefined);
+          setCurrentWaitTime(undefined);
+          break;
+
+        case 'run.queued':
+          setCurrentQueuePosition(event.data.queuePosition);
+          break;
+
         case 'run.in_progress':
-          // Add system message about run status if needed
+          setCurrentQueuePosition(undefined);
+          setCurrentWaitTime(undefined);
           break;
 
         case 'message.delta':
@@ -194,10 +213,27 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                 : msg
             )
           );
+          setCurrentQueuePosition(undefined);
+          setCurrentWaitTime(undefined);
           break;
 
         case 'run.failed':
           handleRunFailed(event.data);
+          setCurrentQueuePosition(undefined);
+          setCurrentWaitTime(undefined);
+          break;
+
+        case 'run.cancelled':
+          const cancelMessage: StreamingMessage = {
+            id: `cancelled_${Date.now()}`,
+            role: 'system',
+            content: 'Analysis was cancelled.',
+            timestamp: new Date(),
+            isComplete: true,
+          };
+          setMessages(prev => [...prev, cancelMessage]);
+          setCurrentQueuePosition(undefined);
+          setCurrentWaitTime(undefined);
           break;
 
         case 'artifact.created':
@@ -357,6 +393,25 @@ const ChatPane: React.FC<ChatPaneProps> = ({
       {connectionError && (
         <Alert severity="warning" sx={{ m: 1 }}>
           {connectionError}
+        </Alert>
+      )}
+
+      {/* Queue status */}
+      {currentQueuePosition && (
+        <Alert severity="info" sx={{ m: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2">
+              Queued (position #{currentQueuePosition})
+              {currentWaitTime &&
+                ` - estimated wait: ${Math.ceil(currentWaitTime / 1000)}s`}
+            </Typography>
+            {onCancelRun && (
+              <IconButton size="small" onClick={onCancelRun} color="error">
+                <Stop fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
         </Alert>
       )}
 
