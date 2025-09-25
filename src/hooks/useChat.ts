@@ -56,6 +56,18 @@ export function useChat({
     null
   );
 
+  // Create refs for callbacks to avoid dependencies
+  const onArtifactCreatedRef = useRef(onArtifactCreated);
+  const onRunStatusChangeRef = useRef(onRunStatusChange);
+  const onQueueUpdateRef = useRef(onQueueUpdate);
+
+  // Update refs when props change
+  useEffect(() => {
+    onArtifactCreatedRef.current = onArtifactCreated;
+    onRunStatusChangeRef.current = onRunStatusChange;
+    onQueueUpdateRef.current = onQueueUpdate;
+  }, [onArtifactCreated, onRunStatusChange, onQueueUpdate]);
+
   // Handle message deltas for streaming
   const handleMessageDelta = useCallback((data: any) => {
     const { messageId, content } = data;
@@ -146,13 +158,13 @@ export function useChat({
           setIsRunning(true);
           setRunStatus('queued');
           currentRunIdRef.current = event.data.runId;
-          onRunStatusChange?.('queued');
+          onRunStatusChangeRef.current?.('queued');
           break;
 
         case 'run.queued':
           setRunStatus('queued');
-          onRunStatusChange?.('queued');
-          onQueueUpdate?.(
+          onRunStatusChangeRef.current?.('queued');
+          onQueueUpdateRef.current?.(
             event.data.queuePosition,
             event.data.estimatedWaitTime
           );
@@ -171,8 +183,8 @@ export function useChat({
         case 'run.in_progress':
           setIsRunning(true);
           setRunStatus('running');
-          onRunStatusChange?.('running');
-          onQueueUpdate?.(undefined, undefined); // Clear queue info
+          onRunStatusChangeRef.current?.('running');
+          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
           break;
 
         case 'message.delta':
@@ -187,16 +199,16 @@ export function useChat({
           setIsRunning(false);
           setRunStatus('completed');
           currentRunIdRef.current = null;
-          onRunStatusChange?.('completed');
-          onQueueUpdate?.(undefined, undefined); // Clear queue info
+          onRunStatusChangeRef.current?.('completed');
+          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
           break;
 
         case 'run.failed':
           setIsRunning(false);
           setRunStatus('failed');
           currentRunIdRef.current = null;
-          onRunStatusChange?.('failed');
-          onQueueUpdate?.(undefined, undefined); // Clear queue info
+          onRunStatusChangeRef.current?.('failed');
+          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
           handleRunFailed(event.data);
           break;
 
@@ -204,8 +216,8 @@ export function useChat({
           setIsRunning(false);
           setRunStatus('cancelled');
           currentRunIdRef.current = null;
-          onRunStatusChange?.('cancelled');
-          onQueueUpdate?.(undefined, undefined); // Clear queue info
+          onRunStatusChangeRef.current?.('cancelled');
+          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
           const cancelMessage: ChatMessage = {
             id: `cancel_${Date.now()}`,
             role: 'system',
@@ -216,7 +228,7 @@ export function useChat({
           break;
 
         case 'artifact.created':
-          onArtifactCreated?.(event.data);
+          onArtifactCreatedRef.current?.(event.data);
           handleArtifactCreated(event.data);
           break;
 
@@ -224,15 +236,12 @@ export function useChat({
           setConnectionError(event.data.error);
           setIsRunning(false);
           setRunStatus('failed');
-          onRunStatusChange?.('failed');
-          onQueueUpdate?.(undefined, undefined); // Clear queue info
+          onRunStatusChangeRef.current?.('failed');
+          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
           break;
       }
     },
     [
-      onArtifactCreated,
-      onRunStatusChange,
-      onQueueUpdate,
       handleMessageDelta,
       handleMessageCompleted,
       handleRunFailed,
@@ -387,11 +396,11 @@ export function useChat({
       setIsRunning(false);
       setRunStatus('cancelled');
       currentRunIdRef.current = null;
-      onRunStatusChange?.('cancelled');
+      onRunStatusChangeRef.current?.('cancelled');
     } catch (error) {
       console.error('Failed to cancel run:', error);
     }
-  }, [threadId, onRunStatusChange]);
+  }, [threadId]);
 
   // Clear messages
   const clearMessages = useCallback(() => {
