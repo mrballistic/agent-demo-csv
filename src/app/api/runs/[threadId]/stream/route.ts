@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { assistantManager, extractManifest } from '@/lib/openai';
 import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
+import { cleanupRun } from '../../../analysis/query/route';
 
 export const runtime = 'nodejs';
 
@@ -136,6 +137,9 @@ async function streamRealOpenAIRun(
   sessionId: string,
   send: (event: StreamEvent) => void
 ) {
+  let runId = '';
+  const startTime = Date.now();
+
   try {
     const result = await assistantManager.processStreamingRun(
       threadId,
@@ -145,13 +149,27 @@ async function streamRealOpenAIRun(
 
         switch (event.event) {
           case 'thread.run.created':
-          case 'thread.run.queued':
+            runId = event.data.id;
             send({
               type: 'run.started',
               data: {
                 runId: event.data.id,
                 threadId,
-                status: event.data.status,
+                status: 'queued',
+                startTime,
+              },
+              timestamp,
+            });
+            break;
+
+          case 'thread.run.queued':
+            send({
+              type: 'run.queued',
+              data: {
+                runId: event.data.id,
+                threadId,
+                status: 'queued',
+                queuePosition: 1, // Could be enhanced with real queue tracking
               },
               timestamp,
             });
@@ -163,7 +181,8 @@ async function streamRealOpenAIRun(
               data: {
                 runId: event.data.id,
                 threadId,
-                status: event.data.status,
+                status: 'in_progress',
+                elapsedTime: Date.now() - startTime,
               },
               timestamp,
             });
@@ -175,23 +194,49 @@ async function streamRealOpenAIRun(
               data: {
                 runId: event.data.id,
                 threadId,
-                status: event.data.status,
+                status: 'completed',
+                elapsedTime: Date.now() - startTime,
               },
               timestamp,
             });
+            // Clean up run tracking
+            cleanupRunFromQuery(event.data.id);
             break;
 
           case 'thread.run.failed':
+            const errorMessage = event.data.last_error?.message || 'Run failed';
+            const errorType = categorizeError(errorMessage);
+
             send({
               type: 'run.failed',
               data: {
                 runId: event.data.id,
                 threadId,
-                status: event.data.status,
-                error: event.data.last_error?.message || 'Run failed',
+                status: 'failed',
+                error: errorMessage,
+                errorType,
+                retryable: errorType !== 'user_error',
+                elapsedTime: Date.now() - startTime,
               },
               timestamp,
             });
+            // Clean up run tracking
+            cleanupRunFromQuery(event.data.id);
+            break;
+
+          case 'thread.run.cancelled':
+            send({
+              type: 'run.cancelled',
+              data: {
+                runId: event.data.id,
+                threadId,
+                status: 'cancelled',
+                elapsedTime: Date.now() - startTime,
+              },
+              timestamp,
+            });
+            // Clean up run tracking
+            cleanupRunFromQuery(event.data.id);
             break;
 
           case 'thread.message.delta':
@@ -248,6 +293,30 @@ async function streamRealOpenAIRun(
     console.log('Real OpenAI streaming completed:', result);
   } catch (error) {
     console.error('Real OpenAI streaming failed:', error);
+
+    // Send error event
+    const errorType = categorizeError(
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    send({
+      type: 'run.failed',
+      data: {
+        runId: runId || `error_${Date.now()}`,
+        threadId,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType,
+        retryable: errorType !== 'user_error',
+        elapsedTime: Date.now() - startTime,
+      },
+      timestamp: Date.now(),
+    });
+
+    // Clean up if we have a runId
+    if (runId) {
+      cleanupRunFromQuery(runId);
+    }
+
     throw error;
   }
 }
@@ -327,6 +396,7 @@ async function simulateStreamingRun(
   send: (event: StreamEvent) => void
 ) {
   const runId = `run_${Date.now()}`;
+  const startTime = Date.now();
 
   // Send run started event
   send({
@@ -335,6 +405,22 @@ async function simulateStreamingRun(
       runId,
       threadId,
       status: 'queued',
+      startTime,
+    },
+    timestamp: Date.now(),
+  });
+
+  // Simulate queue delay
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Send queued status
+  send({
+    type: 'run.queued',
+    data: {
+      runId,
+      threadId,
+      status: 'queued',
+      queuePosition: 1,
     },
     timestamp: Date.now(),
   });
@@ -349,6 +435,7 @@ async function simulateStreamingRun(
       runId,
       threadId,
       status: 'in_progress',
+      elapsedTime: Date.now() - startTime,
     },
     timestamp: Date.now(),
   });
@@ -511,7 +598,45 @@ Generated on: ${new Date().toISOString()}
       runId,
       threadId,
       status: 'completed',
+      elapsedTime: Date.now() - startTime,
     },
     timestamp: Date.now(),
   });
+
+  // Clean up simulated run tracking
+  cleanupRunFromQuery(runId);
+}
+
+// Helper function to categorize errors
+function categorizeError(
+  errorMessage: string
+): 'user_error' | 'system_error' | 'timeout_error' | 'api_error' {
+  const message = errorMessage.toLowerCase();
+
+  if (message.includes('timeout') || message.includes('timed out')) {
+    return 'timeout_error';
+  } else if (
+    message.includes('rate limit') ||
+    message.includes('quota') ||
+    message.includes('insufficient')
+  ) {
+    return 'api_error';
+  } else if (
+    message.includes('missing columns') ||
+    message.includes('invalid data') ||
+    message.includes('format')
+  ) {
+    return 'user_error';
+  } else {
+    return 'system_error';
+  }
+}
+
+// Helper function to clean up run tracking
+function cleanupRunFromQuery(runId: string) {
+  try {
+    cleanupRun(runId);
+  } catch (error) {
+    console.warn('Failed to cleanup run:', error);
+  }
 }

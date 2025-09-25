@@ -92,7 +92,7 @@
   - **DoD:** 3-5 suggestions appear, actions trigger runs, missing columns handled
   - _Requirements: 2.1, 2.2, 2.3, 5.4_
 
-- [-] 12. Run execution with progress tracking
+- [x] 12. Run execution with progress tracking
   - Implement POST /api/analysis/query route (creates message and run)
   - Add budget enforcement: 90s hard timeout, 15s goal for ≤100k rows
   - Forward SSE events to UI with status chips
@@ -101,7 +101,7 @@
 
 ## Artifacts and Downloads
 
-- [ ] 13. Artifacts panel and download system
+- [-] 13. Artifacts panel and download system
   - Create GET /api/artifacts/:id/download route (signed URL or stream)
   - Implement versioning: analysisType_YYYYMMDD_HHMMSS_vN.ext
   - Add POST /api/export/artifacts for bulk ZIP + manifest.txt

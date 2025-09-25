@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { AnalystMuiScaffold } from '@/components/layout';
 import { ChatPane, FileUploader, QuickActions } from '@/components/ui';
+import RunStatusChip from '@/components/ui/RunStatusChip';
 import { useChat } from '@/hooks';
 import {
   Typography,
@@ -13,7 +14,7 @@ import {
   Alert,
   Chip,
 } from '@mui/material';
-import { CloudUpload, Chat, Analytics } from '@mui/icons-material';
+import { CloudUpload, Chat } from '@mui/icons-material';
 import { ChatMessage } from '@/types';
 
 export default function Home() {
@@ -22,13 +23,16 @@ export default function Home() {
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [runStatus, setRunStatus] = useState<
-    'idle' | 'running' | 'completed' | 'failed'
+    'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   >('idle');
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [queuePosition, setQueuePosition] = useState<number | undefined>();
 
   const {
     messages,
     isConnected,
     isRunning,
+    runStatus: hookRunStatus,
     connectionError,
     sendMessage,
     cancelRun,
@@ -40,7 +44,9 @@ export default function Home() {
           onArtifactCreated: artifact => {
             setArtifacts(prev => [...prev, artifact]);
           },
-          onRunStatusChange: setRunStatus,
+          onRunStatusChange: status => {
+            setRunStatus(status);
+          },
         }
       : {}
   );
@@ -51,6 +57,26 @@ export default function Home() {
     const mockThreadId = `thread_${Date.now()}`;
     setThreadId(mockThreadId);
   }, []);
+
+  // Update elapsed time for running analyses
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (hookRunStatus === 'running') {
+      const startTime = Date.now();
+      interval = setInterval(() => {
+        setElapsedTime(Date.now() - startTime);
+      }, 1000);
+    } else {
+      setElapsedTime(0);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [hookRunStatus]);
 
   const handleFileUpload = (result: any) => {
     setHasUploadedFile(true);
@@ -86,6 +112,18 @@ export default function Home() {
     await sendMessage(query, currentFileId);
   };
 
+  const handleRetryAnalysis = () => {
+    // Retry the last user message
+    const lastUserMessage = messages
+      .slice()
+      .reverse()
+      .find(msg => msg.role === 'user');
+
+    if (lastUserMessage && currentFileId) {
+      sendMessage(lastUserMessage.content, currentFileId);
+    }
+  };
+
   return (
     <AnalystMuiScaffold>
       <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -117,25 +155,13 @@ export default function Home() {
                 size="small"
               />
             )}
-            {runStatus !== 'idle' && (
-              <Chip
-                icon={<Analytics />}
-                label={
-                  runStatus === 'running'
-                    ? 'Analyzing...'
-                    : `Analysis ${runStatus}`
-                }
-                color={
-                  runStatus === 'running'
-                    ? 'warning'
-                    : runStatus === 'completed'
-                      ? 'success'
-                      : 'error'
-                }
-                variant="outlined"
-                size="small"
-              />
-            )}
+            <RunStatusChip
+              status={hookRunStatus}
+              elapsedTime={elapsedTime}
+              {...(queuePosition !== undefined && { queuePosition })}
+              onRetry={handleRetryAnalysis}
+              onCancel={cancelRun}
+            />
           </Stack>
         </Box>
 

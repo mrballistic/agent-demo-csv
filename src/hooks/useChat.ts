@@ -13,7 +13,7 @@ interface UseChatOptions {
   threadId?: string;
   onArtifactCreated?: (artifact: any) => void;
   onRunStatusChange?: (
-    status: 'idle' | 'running' | 'completed' | 'failed'
+    status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   ) => void;
 }
 
@@ -21,6 +21,13 @@ interface UseChatReturn {
   messages: ChatMessage[];
   isConnected: boolean;
   isRunning: boolean;
+  runStatus:
+    | 'idle'
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'cancelled';
   connectionError: string | null;
   sendMessage: (content: string, fileId?: string | null) => Promise<void>;
   cancelRun: () => Promise<void>;
@@ -36,6 +43,9 @@ export function useChat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<
+    'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  >('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -80,10 +90,26 @@ export function useChat({
 
   // Handle run failures
   const handleRunFailed = useCallback((data: any) => {
+    const errorType = data.errorType || 'system_error';
+    const retryable = data.retryable !== false;
+
+    let errorContent = `❌ Analysis failed: ${data.error || 'Unknown error'}`;
+
+    // Add retry suggestion for retryable errors
+    if (retryable) {
+      if (errorType === 'timeout_error') {
+        errorContent += '\n\n💡 Try with a smaller dataset or simpler query.';
+      } else if (errorType === 'api_error') {
+        errorContent += '\n\n💡 Please wait a moment and try again.';
+      } else {
+        errorContent += '\n\n💡 Click to retry your request.';
+      }
+    }
+
     const errorMessage: ChatMessage = {
       id: `error_${Date.now()}`,
       role: 'system',
-      content: `Analysis failed: ${data.error || 'Unknown error'}`,
+      content: errorContent,
       timestamp: new Date(),
     };
 
@@ -113,12 +139,30 @@ export function useChat({
 
         case 'run.started':
           setIsRunning(true);
+          setRunStatus('queued');
           currentRunIdRef.current = event.data.runId;
-          onRunStatusChange?.('running');
+          onRunStatusChange?.('queued');
+          break;
+
+        case 'run.queued':
+          setRunStatus('queued');
+          onRunStatusChange?.('queued');
+          // Add queue position message if available
+          if (event.data.queuePosition) {
+            const queueMessage: ChatMessage = {
+              id: `queue_${Date.now()}`,
+              role: 'system',
+              content: `⏳ Queued (position ${event.data.queuePosition})`,
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, queueMessage]);
+          }
           break;
 
         case 'run.in_progress':
           setIsRunning(true);
+          setRunStatus('running');
+          onRunStatusChange?.('running');
           break;
 
         case 'message.delta':
@@ -131,15 +175,31 @@ export function useChat({
 
         case 'run.completed':
           setIsRunning(false);
+          setRunStatus('completed');
           currentRunIdRef.current = null;
           onRunStatusChange?.('completed');
           break;
 
         case 'run.failed':
           setIsRunning(false);
+          setRunStatus('failed');
           currentRunIdRef.current = null;
           onRunStatusChange?.('failed');
           handleRunFailed(event.data);
+          break;
+
+        case 'run.cancelled':
+          setIsRunning(false);
+          setRunStatus('cancelled');
+          currentRunIdRef.current = null;
+          onRunStatusChange?.('cancelled');
+          const cancelMessage: ChatMessage = {
+            id: `cancel_${Date.now()}`,
+            role: 'system',
+            content: '🛑 Analysis cancelled',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, cancelMessage]);
           break;
 
         case 'artifact.created':
@@ -150,6 +210,7 @@ export function useChat({
         case 'error':
           setConnectionError(event.data.error);
           setIsRunning(false);
+          setRunStatus('failed');
           onRunStatusChange?.('failed');
           break;
       }
@@ -274,8 +335,9 @@ export function useChat({
       }
 
       setIsRunning(false);
+      setRunStatus('cancelled');
       currentRunIdRef.current = null;
-      onRunStatusChange?.('idle');
+      onRunStatusChange?.('cancelled');
     } catch (error) {
       console.error('Failed to cancel run:', error);
     }
@@ -309,6 +371,7 @@ export function useChat({
     messages,
     isConnected,
     isRunning,
+    runStatus,
     connectionError,
     sendMessage,
     cancelRun,
