@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { fileStore } from '@/lib/file-store';
 import {
   AppError,
   ErrorFactory,
@@ -259,8 +260,8 @@ export async function POST(request: NextRequest) {
     // Validate file
     validateCSVFile(buffer, file.name);
 
-    // Generate file metadata
-    const fileId = crypto.randomUUID();
+    // Generate file metadata first to use consistent IDs
+    const sessionId = crypto.randomUUID();
     const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
     const encoding = detectEncoding(buffer);
     const text = buffer.toString(encoding);
@@ -275,8 +276,16 @@ export async function POST(request: NextRequest) {
     // Detect PII
     const piiFlags = detectPII(columns || [], sampleData);
 
+    // Store file first to get the actual fileId
+    const storedFile = await fileStore.storeFile(
+      sessionId,
+      file.name,
+      buffer,
+      file.type || 'text/csv'
+    );
+
     const metadata: FileMetadata = {
-      fileId,
+      fileId: storedFile.id,
       filename: file.name,
       size: buffer.length,
       checksum,
@@ -293,13 +302,13 @@ export async function POST(request: NextRequest) {
     };
 
     // Track successful file upload
-    Telemetry.trackFileUpload(buffer.length, file.name, fileId, true);
+    Telemetry.trackFileUpload(buffer.length, file.name, storedFile.id, true);
 
-    // TODO: Store file and metadata (will be implemented in storage tasks)
-    // For now, we'll just return the metadata
+    // Store file and metadata (will be implemented in storage tasks)
+    // TODO: Store file and metadata in file store for data profiling
 
     return NextResponse.json({
-      fileId: metadata.fileId,
+      fileId: storedFile.id,
       filename: metadata.filename,
       size: metadata.size,
       rowCount: metadata.rowCount,

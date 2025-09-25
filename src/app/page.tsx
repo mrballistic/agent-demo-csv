@@ -82,11 +82,10 @@ export default function Home() {
       : {}
   );
 
-  // Initialize thread on mount
+  // Initialize thread on mount - will be replaced with real thread when profiling starts
   useEffect(() => {
-    // For demo purposes, create a mock thread ID
-    const mockThreadId = `thread_${Date.now()}`;
-    setThreadId(mockThreadId);
+    // Start with null threadId - will be set when profiling begins
+    setThreadId(null);
   }, []);
 
   // Update elapsed time for running analyses
@@ -109,7 +108,7 @@ export default function Home() {
     };
   }, [hookRunStatus]);
 
-  const handleFileUpload = (result: any) => {
+  const handleFileUpload = async (result: any) => {
     setHasUploadedFile(true);
     setCurrentFileId(result.fileId);
 
@@ -122,6 +121,52 @@ export default function Home() {
     };
 
     addMessage(systemMessage);
+
+    // Automatically start profiling to create OpenAI thread
+    try {
+      setRunStatus('running');
+
+      const profileResponse = await fetch('/api/analysis/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileId: result.fileId,
+        }),
+      });
+
+      if (!profileResponse.ok) {
+        throw new Error(`Profile API failed: ${profileResponse.status}`);
+      }
+
+      const profileData = await profileResponse.json();
+
+      // Set the real OpenAI thread ID
+      setThreadId(profileData.threadId);
+
+      // Add a message about starting profiling
+      const profilingMessage: ChatMessage = {
+        id: `system_${Date.now()}`,
+        role: 'system',
+        content: '🔍 Starting data profiling...',
+        timestamp: new Date(),
+      };
+
+      addMessage(profilingMessage);
+    } catch (error) {
+      console.error('Failed to start profiling:', error);
+      setRunStatus('idle');
+
+      const errorMessage: ChatMessage = {
+        id: `error_${Date.now()}`,
+        role: 'system',
+        content: `❌ Failed to start analysis: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+
+      addMessage(errorMessage);
+    }
   };
 
   const handleQuickAction = async (actionId: string, analysisType: string) => {
@@ -168,9 +213,8 @@ export default function Home() {
     // Show success message
     setDeleteSuccess(true);
 
-    // Reinitialize with new thread
-    const newThreadId = `thread_${Date.now()}`;
-    setThreadId(newThreadId);
+    // Reset to null threadId - will be set when next profiling begins
+    setThreadId(null);
   };
 
   return (

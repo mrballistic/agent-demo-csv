@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { existsSync } from 'fs';
@@ -80,7 +81,13 @@ export class FileStore {
       filePath,
     };
 
+    // Store in memory for fast access
     this.files.set(fileId, metadata);
+
+    // Persist metadata to disk for cross-process access
+    const metadataPath = filePath + '.meta';
+    await fs.writeFile(metadataPath, JSON.stringify(metadata));
+
     return metadata;
   }
 
@@ -129,7 +136,7 @@ export class FileStore {
    * Retrieve file content by ID
    */
   async getFile(fileId: string): Promise<Buffer | null> {
-    const metadata = this.files.get(fileId);
+    const metadata = this.getFileMetadata(fileId);
 
     if (!metadata) {
       return null;
@@ -154,7 +161,15 @@ export class FileStore {
    * Get file metadata by ID
    */
   getFileMetadata(fileId: string): FileMetadata | null {
-    const metadata = this.files.get(fileId);
+    let metadata = this.files.get(fileId) || null;
+
+    if (!metadata) {
+      // Try to load from disk (for cross-process access)
+      metadata = this.loadMetadataFromDisk(fileId);
+      if (metadata) {
+        this.files.set(fileId, metadata);
+      }
+    }
 
     if (!metadata) {
       return null;
@@ -167,6 +182,42 @@ export class FileStore {
     }
 
     return metadata;
+  }
+
+  /**
+   * Load metadata from disk by scanning all session directories
+   */
+  private loadMetadataFromDisk(fileId: string): FileMetadata | null {
+    try {
+      const sessionDirs = readdirSync(this.baseDir);
+
+      for (const sessionDir of sessionDirs) {
+        const sessionPath = path.join(this.baseDir, sessionDir);
+
+        try {
+          const files = readdirSync(sessionPath);
+
+          for (const file of files) {
+            if (file.endsWith('.meta')) {
+              const metadataPath = path.join(sessionPath, file);
+              const metadataContent = readFileSync(metadataPath, 'utf-8');
+              const metadata: FileMetadata = JSON.parse(metadataContent);
+
+              if (metadata.id === fileId) {
+                return metadata;
+              }
+            }
+          }
+        } catch (error) {
+          // Skip directories that can't be read
+          continue;
+        }
+      }
+    } catch (error) {
+      // Base directory doesn't exist or can't be read
+    }
+
+    return null;
   }
 
   /**

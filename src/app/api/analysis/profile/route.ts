@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assistantManager } from '@/lib/openai';
 import { sessionStore } from '@/lib/session-store';
+import { fileStore } from '@/lib/file-store';
 import {
   AppError,
   ErrorFactory,
@@ -124,19 +125,26 @@ export async function POST(request: NextRequest) {
         let openaiFileId: string;
 
         if (hasOpenAIKey) {
-          // TODO: In a real implementation, we would retrieve the actual file content
-          // and upload it to OpenAI. For now, we'll create a mock file ID.
-          // This would involve:
-          // 1. Getting the file content from our file store or upload data
-          // 2. Uploading to OpenAI Files API
-          // 3. Using the returned file ID
-          openaiFileId = `file-${fileId}`;
-        } else {
-          // Use mock file ID for demo
-          openaiFileId = `file-${fileId}`;
-        }
+          // Get the file content from our file store
+          const fileContent = await fileStore.getFile(fileId);
+          const fileMetadata = fileStore.getFileMetadata(fileId);
 
-        // Create message with CSV attachment
+          if (!fileContent || !fileMetadata) {
+            throw new Error(`File not found in store: ${fileId}`);
+          }
+
+          // Upload file to OpenAI Files API
+          const openaiFile = await assistantManager.uploadFile(
+            fileContent,
+            fileMetadata.originalName,
+            'assistants'
+          );
+
+          openaiFileId = openaiFile.id;
+        } else {
+          // Use mock file ID for demo (this path shouldn't be reached anymore)
+          openaiFileId = `file-${fileId}`;
+        } // Create message with CSV attachment
         await assistantManager.createMessage(
           session.threadId,
           'Profile the file and suggest questions.',

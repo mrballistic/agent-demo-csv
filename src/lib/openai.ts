@@ -146,6 +146,33 @@ export class AssistantManager {
   }
 
   /**
+   * Upload a file to OpenAI Files API
+   */
+  async uploadFile(
+    fileContent: Buffer,
+    filename: string,
+    purpose: 'assistants' | 'fine-tune' = 'assistants'
+  ): Promise<OpenAI.Files.FileObject> {
+    try {
+      // Create a File object from the buffer
+      const file = new File([new Uint8Array(fileContent)], filename, {
+        type: 'text/csv', // Assume CSV for now, could be made configurable
+      });
+
+      const uploadedFile = await this.client.files.create({
+        file: file,
+        purpose: purpose,
+      });
+
+      return uploadedFile;
+    } catch (error) {
+      throw new Error(
+        `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Create and execute a run
    */
   async createRun(

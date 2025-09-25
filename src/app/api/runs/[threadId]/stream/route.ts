@@ -66,8 +66,23 @@ export async function GET(
   // Find session by thread ID
   const session = sessionStore.getSessionByThreadId(threadId);
   if (!session) {
+    console.log(`Session not found for threadId: ${threadId}`);
+    console.log(`Active sessions count: ${sessionStore.getSessionCount()}`);
+    console.log(
+      `Active session threadIds: ${sessionStore
+        .getActiveSessions()
+        .map(s => s.threadId)
+        .join(', ')}`
+    );
+
     return NextResponse.json(
-      { error: 'Session not found or expired' },
+      {
+        error: 'Session not found or expired',
+        details:
+          'Your session may have expired or the server was restarted. Please refresh the page and start a new analysis.',
+        threadId,
+        sessionCount: sessionStore.getSessionCount(),
+      },
       { status: 404 }
     );
   }

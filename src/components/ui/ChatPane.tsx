@@ -400,8 +400,35 @@ const ChatPane: React.FC<ChatPaneProps> = ({
     >
       {/* Connection status */}
       {connectionError && (
-        <Alert severity="warning" sx={{ m: 1 }}>
+        <Alert
+          severity={
+            connectionError.includes('expired') ||
+            connectionError.includes('restarted')
+              ? 'error'
+              : 'warning'
+          }
+          sx={{ m: 1 }}
+          action={
+            connectionError.includes('expired') ||
+            connectionError.includes('restarted') ? (
+              <IconButton
+                color="inherit"
+                size="small"
+                onClick={() => window.location.reload()}
+                aria-label="Refresh page"
+              >
+                ↻
+              </IconButton>
+            ) : undefined
+          }
+        >
           {connectionError}
+          {(connectionError.includes('expired') ||
+            connectionError.includes('restarted')) && (
+            <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+              Click the refresh button to start over.
+            </Typography>
+          )}
         </Alert>
       )}
 

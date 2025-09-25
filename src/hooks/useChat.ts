@@ -265,14 +265,22 @@ export function useChat({
     eventSource.onerror = error => {
       console.error('SSE connection error:', error);
       setIsConnected(false);
-      setConnectionError('Connection lost. Attempting to reconnect...');
 
-      // Attempt to reconnect after a delay
-      setTimeout(() => {
-        if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-          connectToStream();
-        }
-      }, 3000);
+      // Check if this is a 404 error (session expired)
+      if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
+        setConnectionError(
+          'Session expired or server restarted. Please refresh the page and start a new analysis.'
+        );
+      } else {
+        setConnectionError('Connection lost. Attempting to reconnect...');
+
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
+            connectToStream();
+          }
+        }, 3000);
+      }
     };
   }, [threadId, handleStreamEvent]);
 
