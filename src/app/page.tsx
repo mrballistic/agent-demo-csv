@@ -2,30 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { AnalystMuiScaffold } from '@/components/layout';
-import { ChatPane, FileUploader } from '@/components/ui';
+import { ChatPane, FileUploader, QuickActions } from '@/components/ui';
 import { useChat } from '@/hooks';
 import {
   Typography,
   Box,
   Paper,
-  Button,
   Stack,
   Grid,
   Alert,
   Chip,
 } from '@mui/material';
-import {
-  CloudUpload,
-  TrendingUp,
-  Assessment,
-  Chat,
-  Analytics,
-} from '@mui/icons-material';
+import { CloudUpload, Chat, Analytics } from '@mui/icons-material';
 import { ChatMessage } from '@/types';
 
 export default function Home() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [hasUploadedFile, setHasUploadedFile] = useState(false);
+  const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [runStatus, setRunStatus] = useState<
     'idle' | 'running' | 'completed' | 'failed'
@@ -60,6 +54,7 @@ export default function Home() {
 
   const handleFileUpload = (result: any) => {
     setHasUploadedFile(true);
+    setCurrentFileId(result.fileId);
 
     // Add system message about file upload
     const systemMessage: ChatMessage = {
@@ -72,20 +67,23 @@ export default function Home() {
     addMessage(systemMessage);
   };
 
-  const handleQuickAction = async (action: string) => {
-    if (!hasUploadedFile) {
+  const handleQuickAction = async (actionId: string, analysisType: string) => {
+    if (!hasUploadedFile || !currentFileId) {
       return;
     }
 
     const queries = {
       profile: 'Profile this dataset and show me key statistics',
       trends: 'Show me trends in this data over time',
-      'top-sku': 'What are the top performing products or SKUs?',
+      'top-products': 'What are the top performing products or SKUs?',
       'channel-mix': 'Analyze performance by channel or category',
+      'customer-analysis': 'Analyze customer behavior and value distribution',
     };
 
-    const query = queries[action as keyof typeof queries] || action;
-    await sendMessage(query);
+    const query =
+      queries[actionId as keyof typeof queries] ||
+      `Perform ${analysisType} analysis on this data`;
+    await sendMessage(query, currentFileId);
   };
 
   return (
@@ -173,47 +171,11 @@ export default function Home() {
                 </Box>
 
                 {/* Quick actions */}
-                <Box>
-                  <Typography variant="h6" gutterBottom>
-                    Quick Actions
-                  </Typography>
-                  <Stack spacing={1}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<Assessment />}
-                      onClick={() => handleQuickAction('profile')}
-                      disabled={!hasUploadedFile || isRunning}
-                      fullWidth
-                    >
-                      Profile Data
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<TrendingUp />}
-                      onClick={() => handleQuickAction('trends')}
-                      disabled={!hasUploadedFile || isRunning}
-                      fullWidth
-                    >
-                      Show Trends
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => handleQuickAction('top-sku')}
-                      disabled={!hasUploadedFile || isRunning}
-                      fullWidth
-                    >
-                      Top Products
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => handleQuickAction('channel-mix')}
-                      disabled={!hasUploadedFile || isRunning}
-                      fullWidth
-                    >
-                      Channel Analysis
-                    </Button>
-                  </Stack>
-                </Box>
+                <QuickActions
+                  fileId={currentFileId}
+                  onAction={handleQuickAction}
+                  disabled={isRunning}
+                />
 
                 {/* Artifacts */}
                 {artifacts.length > 0 && (
@@ -257,6 +219,7 @@ export default function Home() {
                     onCancelRun={cancelRun}
                     disabled={!hasUploadedFile}
                     isRunning={isRunning}
+                    fileId={currentFileId}
                   />
                 ) : (
                   <Paper

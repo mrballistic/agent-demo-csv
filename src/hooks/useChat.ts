@@ -22,7 +22,7 @@ interface UseChatReturn {
   isConnected: boolean;
   isRunning: boolean;
   connectionError: string | null;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, fileId?: string | null) => Promise<void>;
   cancelRun: () => Promise<void>;
   clearMessages: () => void;
   addMessage: (message: ChatMessage) => void;
@@ -205,7 +205,7 @@ export function useChat({
 
   // Send message
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, fileId?: string | null) => {
       if (!threadId) {
         throw new Error('No thread ID available');
       }
@@ -230,6 +230,7 @@ export function useChat({
           body: JSON.stringify({
             threadId,
             query: content,
+            fileId: fileId || undefined,
           }),
         });
 

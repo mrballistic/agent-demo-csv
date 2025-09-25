@@ -84,7 +84,7 @@
   - **DoD:** Streaming deltas render smoothly, completed messages pinned, focus management works
   - _Requirements: 5.1, 5.2, 5.4_
 
-- [ ] 11. Analysis suggestions and quick actions
+- [-] 11. Analysis suggestions and quick actions
   - Create GET /api/analysis/suggestions?fileId endpoint
   - Build QuickActions component with preset analysis buttons
   - Gray out suggestions when required columns missing

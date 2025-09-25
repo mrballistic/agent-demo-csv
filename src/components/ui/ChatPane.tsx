@@ -31,11 +31,12 @@ interface StreamingMessage extends ChatMessage {
 interface ChatPaneProps {
   threadId?: string;
   messages: ChatMessage[];
-  onSendMessage?: (content: string) => void;
+  onSendMessage?: (content: string, fileId?: string | null) => void;
   onCancelRun?: () => void;
   className?: string;
   disabled?: boolean;
   isRunning?: boolean;
+  fileId?: string | null;
 }
 
 interface StreamEvent {
@@ -52,6 +53,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   className,
   disabled = false,
   isRunning = false,
+  fileId,
 }) => {
   const [messages, setMessages] = useState<StreamingMessage[]>(initialMessages);
   const [inputValue, setInputValue] = useState('');
@@ -281,14 +283,14 @@ const ChatPane: React.FC<ChatPaneProps> = ({
     setMessages(prev => [...prev, userMessage]);
 
     // Call parent handler
-    onSendMessage?.(inputValue.trim());
+    onSendMessage?.(inputValue.trim(), fileId);
 
     // Clear input
     setInputValue('');
 
     // Scroll to bottom
     setTimeout(() => scrollToBottom(), 100);
-  }, [inputValue, disabled, onSendMessage, scrollToBottom]);
+  }, [inputValue, disabled, onSendMessage, scrollToBottom, fileId]);
 
   // Handle keyboard events
   const handleKeyDown = useCallback(
