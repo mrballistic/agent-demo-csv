@@ -333,13 +333,6 @@ export default function Home() {
 
             {/* Status indicators */}
             <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-              <Chip
-                icon={<Chat />}
-                label={isConnected ? 'Connected' : 'Disconnected'}
-                color={isConnected ? 'success' : 'error'}
-                variant="outlined"
-                size="small"
-              />
               {hasUploadedFile && (
                 <Chip
                   icon={<CloudUpload />}

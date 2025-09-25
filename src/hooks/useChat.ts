@@ -52,9 +52,6 @@ export function useChat({
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
-  const handleStreamEventRef = useRef<((event: StreamEvent) => void) | null>(
-    null
-  );
 
   // Create refs for callbacks to avoid dependencies
   const onArtifactCreatedRef = useRef(onArtifactCreated);
@@ -145,115 +142,6 @@ export function useChat({
     setMessages(prev => [...prev, artifactMessage]);
   }, []);
 
-  // Handle stream events
-  const handleStreamEvent = useCallback(
-    (event: StreamEvent) => {
-      switch (event.type) {
-        case 'connection.established':
-          setIsConnected(true);
-          setConnectionError(null);
-          break;
-
-        case 'run.started':
-          setIsRunning(true);
-          setRunStatus('queued');
-          currentRunIdRef.current = event.data.runId;
-          onRunStatusChangeRef.current?.('queued');
-          break;
-
-        case 'run.queued':
-          setRunStatus('queued');
-          onRunStatusChangeRef.current?.('queued');
-          onQueueUpdateRef.current?.(
-            event.data.queuePosition,
-            event.data.estimatedWaitTime
-          );
-          // Add queue position message if available
-          if (event.data.queuePosition) {
-            const queueMessage: ChatMessage = {
-              id: `queue_${Date.now()}`,
-              role: 'system',
-              content: `⏳ Queued (position ${event.data.queuePosition})`,
-              timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, queueMessage]);
-          }
-          break;
-
-        case 'run.in_progress':
-          setIsRunning(true);
-          setRunStatus('running');
-          onRunStatusChangeRef.current?.('running');
-          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
-          break;
-
-        case 'message.delta':
-          handleMessageDelta(event.data);
-          break;
-
-        case 'message.completed':
-          handleMessageCompleted(event.data);
-          break;
-
-        case 'run.completed':
-          setIsRunning(false);
-          setRunStatus('completed');
-          currentRunIdRef.current = null;
-          onRunStatusChangeRef.current?.('completed');
-          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
-          break;
-
-        case 'run.failed':
-          setIsRunning(false);
-          setRunStatus('failed');
-          currentRunIdRef.current = null;
-          onRunStatusChangeRef.current?.('failed');
-          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
-          handleRunFailed(event.data);
-          break;
-
-        case 'run.cancelled':
-          setIsRunning(false);
-          setRunStatus('cancelled');
-          currentRunIdRef.current = null;
-          onRunStatusChangeRef.current?.('cancelled');
-          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
-          const cancelMessage: ChatMessage = {
-            id: `cancel_${Date.now()}`,
-            role: 'system',
-            content: '🛑 Analysis cancelled',
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, cancelMessage]);
-          break;
-
-        case 'artifact.created':
-          onArtifactCreatedRef.current?.(event.data);
-          handleArtifactCreated(event.data);
-          break;
-
-        case 'error':
-          setConnectionError(event.data.error);
-          setIsRunning(false);
-          setRunStatus('failed');
-          onRunStatusChangeRef.current?.('failed');
-          onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
-          break;
-      }
-    },
-    [
-      handleMessageDelta,
-      handleMessageCompleted,
-      handleRunFailed,
-      handleArtifactCreated,
-    ]
-  );
-
-  // Update ref when handleStreamEvent changes
-  useEffect(() => {
-    handleStreamEventRef.current = handleStreamEvent;
-  }, [handleStreamEvent]);
-
   // Set up SSE connection - inline to avoid dependency issues
   useEffect(() => {
     if (!threadId) {
@@ -282,7 +170,159 @@ export function useChat({
     eventSource.onmessage = event => {
       try {
         const streamEvent: StreamEvent = JSON.parse(event.data);
-        handleStreamEventRef.current?.(streamEvent);
+
+        switch (streamEvent.type) {
+          case 'connection.established':
+            setIsConnected(true);
+            setConnectionError(null);
+            break;
+
+          case 'run.started':
+            setIsRunning(true);
+            setRunStatus('queued');
+            currentRunIdRef.current = streamEvent.data.runId;
+            onRunStatusChangeRef.current?.('queued');
+            break;
+
+          case 'run.queued':
+            setRunStatus('queued');
+            onRunStatusChangeRef.current?.('queued');
+            onQueueUpdateRef.current?.(
+              streamEvent.data.queuePosition,
+              streamEvent.data.estimatedWaitTime
+            );
+            // Add queue position message if available
+            if (streamEvent.data.queuePosition) {
+              const queueMessage: ChatMessage = {
+                id: `queue_${Date.now()}`,
+                role: 'system',
+                content: `⏳ Queued (position ${streamEvent.data.queuePosition})`,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, queueMessage]);
+            }
+            break;
+
+          case 'run.in_progress':
+            setIsRunning(true);
+            setRunStatus('running');
+            onRunStatusChangeRef.current?.('running');
+            onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            break;
+
+          case 'message.delta':
+            {
+              const { messageId, content } = streamEvent.data;
+              setMessages(prev => {
+                const existingIndex = prev.findIndex(
+                  msg => msg.id === messageId
+                );
+                if (existingIndex >= 0) {
+                  const updated = [...prev];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    content: content,
+                  } as ChatMessage;
+                  return updated;
+                } else {
+                  const newMessage: ChatMessage = {
+                    id: messageId,
+                    role: 'assistant',
+                    content: content,
+                    timestamp: new Date(),
+                  };
+                  return [...prev, newMessage];
+                }
+              });
+            }
+            break;
+
+          case 'message.completed':
+            {
+              const { messageId, content } = streamEvent.data;
+              setMessages(prev =>
+                prev.map(msg =>
+                  msg.id === messageId ? { ...msg, content } : msg
+                )
+              );
+            }
+            break;
+
+          case 'run.completed':
+            setIsRunning(false);
+            setRunStatus('completed');
+            currentRunIdRef.current = null;
+            onRunStatusChangeRef.current?.('completed');
+            onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            break;
+
+          case 'run.failed':
+            setIsRunning(false);
+            setRunStatus('failed');
+            currentRunIdRef.current = null;
+            onRunStatusChangeRef.current?.('failed');
+            onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            {
+              const errorType = streamEvent.data.errorType || 'system_error';
+              const retryable = streamEvent.data.retryable !== false;
+              let errorContent = `❌ Analysis failed: ${streamEvent.data.error || 'Unknown error'}`;
+              if (retryable) {
+                if (errorType === 'timeout_error') {
+                  errorContent +=
+                    '\\n\\n💡 Try with a smaller dataset or simpler query.';
+                } else if (errorType === 'api_error') {
+                  errorContent +=
+                    '\\n\\n💡 Please wait a moment and try again.';
+                } else {
+                  errorContent += '\\n\\n💡 Click to retry your request.';
+                }
+              }
+              const errorMessage: ChatMessage = {
+                id: `error_${Date.now()}`,
+                role: 'system',
+                content: errorContent,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, errorMessage]);
+            }
+            break;
+
+          case 'run.cancelled':
+            setIsRunning(false);
+            setRunStatus('cancelled');
+            currentRunIdRef.current = null;
+            onRunStatusChangeRef.current?.('cancelled');
+            onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            const cancelMessage: ChatMessage = {
+              id: `cancel_${Date.now()}`,
+              role: 'system',
+              content: '🛑 Analysis cancelled',
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, cancelMessage]);
+            break;
+
+          case 'artifact.created':
+            onArtifactCreatedRef.current?.(streamEvent.data);
+            {
+              const artifactMessage: ChatMessage = {
+                id: `artifact_${Date.now()}`,
+                role: 'system',
+                content: `📄 Created: ${streamEvent.data.filename}`,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, artifactMessage]);
+            }
+            break;
+
+          case 'error':
+            setConnectionError(streamEvent.data.error);
+            setIsRunning(false);
+            setRunStatus('failed');
+            onRunStatusChangeRef.current?.('failed');
+            onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            break;
+        }
       } catch (error) {
         console.error('Failed to parse stream event:', error);
       }
@@ -321,7 +361,7 @@ export function useChat({
         eventSourceRef.current = null;
       }
     };
-  }, [threadId]); // Only depend on threadId, not on handleStreamEvent
+  }, [threadId]); // Only depend on threadId
 
   // Send message
   const sendMessage = useCallback(
