@@ -77,9 +77,29 @@ describe('ErrorFactory', () => {
 
     expect(error.type).toBe(ErrorType.API_ERROR);
     expect(error.message).toContain('rate limit');
+    expect(error.suggestedAction).toContain('60 seconds');
     expect(error.retryable).toBe(true);
     expect(error.errorClass).toBe('openai_rate_limit');
     expect(error.details).toEqual({ retryAfter: 60 });
+  });
+
+  it('should create OpenAI server error', () => {
+    const error = ErrorFactory.openaiServerError(503);
+
+    expect(error.type).toBe(ErrorType.API_ERROR);
+    expect(error.message).toContain('temporarily unavailable');
+    expect(error.retryable).toBe(true);
+    expect(error.errorClass).toBe('openai_server_error');
+    expect(error.details).toEqual({ statusCode: 503 });
+  });
+
+  it('should create OpenAI authentication error', () => {
+    const error = ErrorFactory.openaiAuthenticationError();
+
+    expect(error.type).toBe(ErrorType.SYSTEM_ERROR);
+    expect(error.message).toContain('authentication failed');
+    expect(error.retryable).toBe(false);
+    expect(error.errorClass).toBe('openai_auth_error');
   });
 
   it('should create missing columns error', () => {
@@ -193,6 +213,30 @@ describe('classifyError', () => {
 
     expect(result.type).toBe(ErrorType.API_ERROR);
     expect(result.errorClass).toBe('openai_rate_limit');
+  });
+
+  it('should classify server errors', () => {
+    const error = new Error('Server error (503)');
+    const result = classifyError(error);
+
+    expect(result.type).toBe(ErrorType.API_ERROR);
+    expect(result.errorClass).toBe('openai_server_error');
+  });
+
+  it('should classify authentication errors', () => {
+    const error = new Error('Unauthorized (401)');
+    const result = classifyError(error);
+
+    expect(result.type).toBe(ErrorType.SYSTEM_ERROR);
+    expect(result.errorClass).toBe('openai_auth_error');
+  });
+
+  it('should classify network errors', () => {
+    const error = new Error('Network connection failed');
+    const result = classifyError(error);
+
+    expect(result.type).toBe(ErrorType.SYSTEM_ERROR);
+    expect(result.message).toContain('Network connection error');
   });
 
   it('should classify quota errors', () => {

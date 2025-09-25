@@ -110,7 +110,7 @@
 
 ## Error Handling and Resilience
 
-- [ ] 14. Robust error handling and retries
+- [-] 14. Robust error handling and retries
   - Implement error taxonomy: VALIDATION_ERROR, USER_ERROR, API_ERROR, TIMEOUT_ERROR, SYSTEM_ERROR
   - Add exponential backoff for transient OpenAI errors
   - Support Idempotency-Key header on analysis POSTs

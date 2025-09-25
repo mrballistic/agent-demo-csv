@@ -121,7 +121,9 @@ export const ErrorFactory = {
   // OpenAI API errors
   openaiRateLimit: (retryAfter?: number) =>
     new AppError(ErrorType.API_ERROR, 'OpenAI API rate limit exceeded', {
-      suggestedAction: 'Please wait a few minutes and try again',
+      suggestedAction: retryAfter
+        ? `Please wait ${retryAfter} seconds and try again`
+        : 'Please wait a few minutes and try again',
       errorClass: 'openai_rate_limit',
       details: { retryAfter },
     }),
@@ -137,6 +139,32 @@ export const ErrorFactory = {
     new AppError(ErrorType.TIMEOUT_ERROR, 'Analysis timed out', {
       suggestedAction: 'Try with a smaller dataset or simpler query',
       errorClass: 'openai_timeout',
+    }),
+
+  openaiServerError: (statusCode?: number) =>
+    new AppError(
+      ErrorType.API_ERROR,
+      'OpenAI service temporarily unavailable',
+      {
+        suggestedAction: 'Please try again in a few moments',
+        errorClass: 'openai_server_error',
+        details: { statusCode },
+      }
+    ),
+
+  openaiInvalidRequest: (message: string) =>
+    new AppError(ErrorType.USER_ERROR, `Invalid request: ${message}`, {
+      retryable: false,
+      suggestedAction: 'Check your request format and try again',
+      errorClass: 'openai_invalid_request',
+      details: { originalMessage: message },
+    }),
+
+  openaiAuthenticationError: () =>
+    new AppError(ErrorType.SYSTEM_ERROR, 'OpenAI authentication failed', {
+      retryable: false,
+      suggestedAction: 'Contact support - API key configuration issue',
+      errorClass: 'openai_auth_error',
     }),
 
   // Analysis errors
@@ -277,7 +305,11 @@ export class RetryHandler {
       }
 
       // Network errors are retryable
-      if (message.includes('network') || message.includes('connection')) {
+      if (
+        message.includes('network') ||
+        message.includes('connection') ||
+        message.includes('econnreset')
+      ) {
         return true;
       }
 
@@ -285,9 +317,30 @@ export class RetryHandler {
       if (
         message.includes('500') ||
         message.includes('502') ||
-        message.includes('503')
+        message.includes('503') ||
+        message.includes('504')
       ) {
         return true;
+      }
+
+      // Specific OpenAI error codes that are retryable
+      if (
+        message.includes('server_error') ||
+        message.includes('service_unavailable')
+      ) {
+        return true;
+      }
+
+      // Non-retryable errors
+      if (
+        message.includes('401') || // Unauthorized
+        message.includes('403') || // Forbidden
+        message.includes('400') || // Bad request
+        message.includes('invalid api key') ||
+        message.includes('quota') ||
+        message.includes('insufficient_quota')
+      ) {
+        return false;
       }
     }
 
@@ -339,9 +392,14 @@ export function classifyError(error: unknown): AppError {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
-    // OpenAI specific errors
+    // OpenAI specific errors with enhanced pattern matching
     if (message.includes('rate limit') || message.includes('429')) {
-      return ErrorFactory.openaiRateLimit();
+      // Try to extract retry-after from message
+      const retryMatch = message.match(/retry.*?(\d+)/);
+      const retryAfter = retryMatch
+        ? parseInt(retryMatch[1] || '', 10)
+        : undefined;
+      return ErrorFactory.openaiRateLimit(retryAfter);
     }
 
     if (message.includes('quota') || message.includes('insufficient_quota')) {
@@ -350,6 +408,38 @@ export function classifyError(error: unknown): AppError {
 
     if (message.includes('timeout') || message.includes('timed out')) {
       return ErrorFactory.openaiTimeout();
+    }
+
+    // Server errors (5xx)
+    if (
+      message.includes('500') ||
+      message.includes('502') ||
+      message.includes('503') ||
+      message.includes('504')
+    ) {
+      const statusMatch = message.match(/(\d{3})/);
+      const statusCode = statusMatch
+        ? parseInt(statusMatch[1] || '', 10)
+        : undefined;
+      return ErrorFactory.openaiServerError(statusCode);
+    }
+
+    // Authentication errors
+    if (
+      message.includes('unauthorized') ||
+      message.includes('401') ||
+      message.includes('invalid api key')
+    ) {
+      return ErrorFactory.openaiAuthenticationError();
+    }
+
+    // Invalid request errors
+    if (
+      message.includes('400') ||
+      message.includes('bad request') ||
+      message.includes('invalid request')
+    ) {
+      return ErrorFactory.openaiInvalidRequest(error.message);
     }
 
     // File validation errors
@@ -372,6 +462,15 @@ export function classifyError(error: unknown): AppError {
     // Session errors
     if (message.includes('session') && message.includes('not found')) {
       return ErrorFactory.sessionNotFound();
+    }
+
+    // Network errors
+    if (
+      message.includes('network') ||
+      message.includes('connection') ||
+      message.includes('econnreset')
+    ) {
+      return ErrorFactory.systemError('Network connection error', error);
     }
 
     // Default to system error
