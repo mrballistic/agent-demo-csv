@@ -190,7 +190,7 @@ export async function GET(
 
         // Add more detailed debugging to understand the queue state
         const queueStats = runQueue.getStats();
-        console.log(`[Stream ${threadId}] Queue stats:`, {
+        console.log(`    // Removed excessive queue logging for clarity`, {
           total: queueStats.total,
           queued: queueStats.queued,
           running: queueStats.running,
@@ -368,6 +368,7 @@ async function processQueuedRun(
 
     const messageId = `msg_${Date.now()}`;
     let accumulatedContent = '';
+    let hasStructuredOutput = false; // Track if we've processed structured output
 
     for await (const event of analysisStream) {
       console.log(`Stream event received: ${event.type}`);
@@ -375,28 +376,48 @@ async function processQueuedRun(
       if (event.type === 'content') {
         accumulatedContent += event.data.delta;
 
-        // Send message delta for streaming response
-        send({
-          type: 'message.delta',
-          data: {
-            messageId,
-            content: accumulatedContent,
-            role: 'assistant',
-            delta: event.data.delta,
-          },
-          timestamp: Date.now(),
-        });
+        // Only send raw content if we haven't processed structured output yet
+        if (!hasStructuredOutput) {
+          // Send message delta for streaming response
+          send({
+            type: 'message.delta',
+            data: {
+              messageId,
+              content: accumulatedContent,
+              role: 'assistant',
+              delta: event.data.delta,
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } else if (event.type === 'structured_output') {
+        // Handle structured analysis output for follow-up questions
+        hasStructuredOutput = true;
+        const analysisData = event.data;
+        console.log(
+          'Follow-up question returned structured analysis, processing...'
+        );
+
+        // Create artifacts and send formatted summary like initial analysis
+        await handleStructuredAnalysisOutput(
+          analysisData,
+          queuedRun.sessionId,
+          send
+        );
       } else if (event.type === 'done') {
-        // Send final message
-        send({
-          type: 'message.completed',
-          data: {
-            messageId,
-            content: accumulatedContent,
-            role: 'assistant',
-          },
-          timestamp: Date.now(),
-        });
+        // Only send final message if we haven't processed structured output
+        if (!hasStructuredOutput) {
+          // Send final message
+          send({
+            type: 'message.completed',
+            data: {
+              messageId,
+              content: accumulatedContent,
+              role: 'assistant',
+            },
+            timestamp: Date.now(),
+          });
+        }
 
         // Send run completed
         console.log('Follow-up question completed successfully');
@@ -560,14 +581,61 @@ async function streamRealOpenAIRun(
     const conversationHistory = conversationManager.getConversation(sessionId);
     const isInitialAnalysis = conversationHistory.length <= 1; // Only system message or empty
 
+    // 🚨 CRITICAL FIX: For queued runs (follow-up questions), NEVER use structured analysis
+    // The processQueuedRun function should handle all follow-up questions
+    const queuedRun = runQueue.getCurrentRun(threadId);
+    const isFollowUpRequest =
+      queuedRun && queuedRun.status === 'running' && queuedRun.startedAt;
+
+    if (isFollowUpRequest) {
+      console.log(
+        '🔥 DETECTED FOLLOW-UP REQUEST - Skipping main analysis logic, this should be handled by processQueuedRun only!'
+      );
+      console.log(
+        '⚠️ This request should not continue through main analysis path'
+      );
+      // Return early - this should be handled by processQueuedRun only
+      return {
+        runId: queuedRun.id,
+        skipped: true,
+      };
+    }
+
+    console.log(`=== CONVERSATION DEBUG ===`);
+    console.log(`SessionId: ${sessionId}`);
+    console.log(`Conversation history length: ${conversationHistory.length}`);
+    console.log(
+      `Conversation history:`,
+      conversationHistory.map(m => ({
+        role: m.role,
+        contentPreview: m.content.substring(0, 100) + '...',
+        timestamp: m.timestamp,
+      }))
+    );
+    console.log(`CSV content present: ${!!csvContent}`);
+    console.log(`isInitialAnalysis: ${isInitialAnalysis}`);
+    console.log(
+      `Analysis type will be: ${isInitialAnalysis && csvContent ? 'structured analysis' : 'regular conversation'}`
+    );
+    console.log(`=========================`);
+
     console.log(
       `Analysis type: ${isInitialAnalysis ? 'initial' : 'follow-up'}, CSV present: ${!!csvContent}, conversation length: ${conversationHistory.length}`
     );
 
     let analysisStream;
+    console.log('🚨 CRITICAL DEBUG: About to choose analysis type...');
+    console.log(`🚨 isInitialAnalysis: ${isInitialAnalysis}`);
+    console.log(`🚨 csvContent exists: ${!!csvContent}`);
+    console.log(
+      `🚨 Condition (isInitialAnalysis && csvContent): ${isInitialAnalysis && csvContent}`
+    );
+
     if (isInitialAnalysis && csvContent) {
       // Use structured analysis for initial CSV analysis
-      console.log('Using structured analysis for initial CSV analysis');
+      console.log(
+        '🚨 USING STRUCTURED ANALYSIS - This should NOT happen for follow-up questions!'
+      );
       analysisStream = conversationManager.streamAnalysis(
         sessionId,
         userMessage,
@@ -575,7 +643,9 @@ async function streamRealOpenAIRun(
       );
     } else {
       // Use regular conversation for follow-up questions
-      console.log('Using regular conversation for follow-up questions');
+      console.log(
+        '🚨 USING REGULAR CONVERSATION - This is correct for follow-up questions'
+      );
       analysisStream = conversationManager.streamConversation(
         sessionId,
         userMessage
@@ -587,13 +657,14 @@ async function streamRealOpenAIRun(
     const isStreamingStructured = isInitialAnalysis && csvContent;
 
     for await (const event of analysisStream) {
-      console.log(`Stream event received: ${event.type}`);
+      // Stream event logging removed for clarity
 
       if (event.type === 'content') {
         accumulatedContent += event.data.delta;
 
         // For structured analysis, don't stream the raw JSON - wait for structured_output
         if (!isStreamingStructured) {
+          // Content delta logged
           send({
             type: 'message.delta',
             data: {
@@ -619,7 +690,22 @@ async function streamRealOpenAIRun(
         await handleStructuredAnalysisOutput(analysisData, sessionId, send);
       } else if (event.type === 'done') {
         // Analysis completed successfully - send run completed
-        console.log('Analysis completed successfully');
+        console.log(`✅ Analysis completed successfully`);
+
+        // For regular conversations, send a final message completion event
+        if (!isStreamingStructured && accumulatedContent) {
+          console.log('📝 Sending final message completion');
+          send({
+            type: 'message.completed',
+            data: {
+              messageId,
+              content: accumulatedContent,
+              role: 'assistant',
+            },
+            timestamp: Date.now(),
+          });
+        }
+
         send({
           type: 'run.completed',
           data: {

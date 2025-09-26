@@ -175,6 +175,21 @@ Rules:
 
 Important: You must provide a structured response with insight, files, and metadata.`;
 
+// Conversational system prompt for follow-up questions
+const CONVERSATIONAL_SYSTEM_PROMPT = `You are "Analyst-in-a-Box", a helpful data analyst assistant.
+
+You are having a conversation about CSV data analysis. The user has already received an initial analysis and may be asking follow-up questions about the data, requesting clarifications, or asking for additional insights.
+
+Key behaviors:
+- Provide clear, conversational responses in natural language (NOT JSON)
+- Reference the previously analyzed data when relevant
+- If asked about specific data points, provide helpful explanations
+- If asked to perform new analysis, explain what you found in conversational form
+- Be helpful and informative while maintaining focus on data insights
+- You can reference charts, trends, and findings from the original analysis
+
+Remember: Respond in natural conversational text, NOT as structured JSON output.`;
+
 // Conversation message type
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -205,6 +220,19 @@ export class ConversationManager {
       {
         role: 'system',
         content: SYSTEM_PROMPT,
+        timestamp: Date.now(),
+      },
+    ]);
+  }
+
+  /**
+   * Initialize a conversation with conversational system prompt for follow-up questions
+   */
+  initializeConversationalChat(sessionId: string): void {
+    this.conversations.set(sessionId, [
+      {
+        role: 'system',
+        content: CONVERSATIONAL_SYSTEM_PROMPT,
         timestamp: Date.now(),
       },
     ]);
@@ -391,6 +419,9 @@ export class ConversationManager {
     data: any;
   }> {
     try {
+      console.log(
+        '💥💥💥 STREAMANALYSIS CALLED - This should ONLY show for initial CSV analysis! 💥💥💥'
+      );
       console.log('ConversationManager.streamAnalysis called:', {
         sessionId,
         userMessage: userMessage.substring(0, 100) + '...',
@@ -587,14 +618,39 @@ export class ConversationManager {
     userMessage: string,
     fileId?: string
   ): AsyncGenerator<{
-    type: 'content' | 'error' | 'done';
+    type: 'content' | 'structured_output' | 'error' | 'done';
     data: any;
   }> {
+    console.log(
+      '🔥🔥🔥 STREAMCONVERSATION CALLED - This should show for follow-up questions! 🔥🔥🔥'
+    );
+    console.log(
+      `🔥 SessionId: ${sessionId}, UserMessage: ${userMessage.substring(0, 100)}, FileId: ${fileId}`
+    );
     try {
       // Initialize conversation if it doesn't exist
       if (!this.conversations.has(sessionId)) {
         this.initializeConversation(sessionId);
       }
+
+      console.log(
+        `📊 Follow-up question: "${userMessage.substring(0, 60)}..."`
+      );
+
+      // For follow-up questions with CSV data (fileId provided), always use structured analysis
+      // The frontend will parse the JSON and display the insight conversationally + generate charts
+      if (fileId) {
+        console.log(
+          '� Using structured analysis - frontend will display insight as conversation + generate charts'
+        );
+        const csvContent = await this.loadCsvContent(fileId);
+        yield* this.streamAnalysis(sessionId, userMessage, csvContent);
+        return;
+      }
+
+      console.log(
+        '💬 Using conversational response for non-CSV follow-up question'
+      );
 
       // Get CSV content if fileId is provided
       let csvContent: string | undefined;
@@ -711,6 +767,19 @@ export class ConversationManager {
     } catch (error) {
       console.error('Analysis failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Helper to load CSV content from fileId
+   */
+  private async loadCsvContent(fileId: string): Promise<string | undefined> {
+    try {
+      const fileBuffer = await fileStore.getFile(fileId);
+      return fileBuffer ? fileBuffer.toString('utf-8') : undefined;
+    } catch (error) {
+      console.warn(`Could not load CSV content for fileId ${fileId}:`, error);
+      return undefined;
     }
   }
 }
