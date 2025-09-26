@@ -680,7 +680,7 @@ async function handleStructuredAnalysisOutput(
     if (analysisData.files && Array.isArray(analysisData.files)) {
       // Import dynamic chart generator
       const { generateDynamicChart } = await import(
-        '@/lib/dynamic-chart-generator'
+        '@/lib/svg-chart-generator'
       );
 
       for (const file of analysisData.files) {
@@ -690,99 +690,42 @@ async function handleStructuredAnalysisOutput(
             if (file.type === 'image' && file.purpose === 'chart') {
               console.log(`Generating dynamic chart for: ${file.path}`);
 
-              // Generate PNG chart using real data from AI analysis
-              const chartBuffer = await generateDynamicChart(
-                analysisData,
-                sessionId
-              );
+              // Generate SVG chart using real data from AI analysis
+              const chartResult = await generateDynamicChart(analysisData);
 
-              if (chartBuffer) {
-                // Create artifact for the generated chart
-                const chartArtifact = await fileStore.storeArtifact(
-                  sessionId,
-                  'chart',
-                  chartBuffer,
-                  'png'
+              if (chartResult) {
+                // Extract artifact ID from the path
+                const artifactId =
+                  chartResult.path.split('/').pop()?.split('.')[0] || 'chart';
+
+                console.log(
+                  `Generated chart available at: ${chartResult.path}`
                 );
 
-                // Update session with this artifact
-                const session = sessionStore.getSession(sessionId);
-                if (session) {
-                  session.artifacts.push({
-                    id: chartArtifact.id,
-                    name: chartArtifact.originalName,
-                    type: 'image',
-                    size: chartArtifact.size,
-                    checksum: chartArtifact.checksum,
-                    createdAt: chartArtifact.createdAt,
-                  });
-
-                  sessionStore.updateSession(sessionId, {
-                    artifacts: session.artifacts,
-                    metrics: {
-                      ...session.metrics,
-                      artifactsGenerated:
-                        session.metrics.artifactsGenerated + 1,
-                    },
-                  });
-                }
-
-                // Send artifact event for the artifacts panel
-                send({
-                  type: 'artifact.created',
-                  data: {
-                    artifactId: chartArtifact.id,
-                    filename: chartArtifact.originalName,
-                    type: 'image',
-                    purpose: file.purpose || 'chart',
-                    downloadUrl: `/api/artifacts/${chartArtifact.id}/download`,
-                    suppressMessage: true,
-                  },
-                  timestamp: Date.now(),
-                });
-
+                // Add processed file info
                 processedFiles.push({
                   ...file,
-                  artifactId: chartArtifact.id,
-                  downloadUrl: `/api/artifacts/${chartArtifact.id}/download`,
+                  artifactId,
+                  downloadUrl: chartResult.path,
                 });
 
                 // Add it to the content for inline display
-                const imageTitle =
-                  file.purpose === 'chart'
-                    ? 'Generated Chart'
-                    : 'Visualization';
-                imageContent += `\n\n## ${imageTitle}\n\n![${imageTitle}](/api/artifacts/${chartArtifact.id}/download)\n\n*${file.purpose || 'Generated visualization'}*\n`;
+                const imageTitle = analysisData.chart_data?.title || 'Chart';
+                imageContent += `\n\n## ${imageTitle}\n\n![${imageTitle}](${chartResult.path})\n\n*${file.purpose || 'Generated visualization'}*\n`;
 
                 console.log(
-                  `Successfully generated chart: ${file.path} -> artifact ${chartArtifact.id}`
+                  `Successfully generated chart: ${file.path} -> ${chartResult.path}`
                 );
               } else {
-                console.warn(`Failed to generate chart for ${file.path}`);
-                processedFiles.push({
-                  ...file,
-                  status: 'error',
-                  error: 'Chart generation failed',
-                });
+                console.warn('Chart generation returned no result');
               }
             } else {
-              // For non-chart files, just record them as pending
               console.log(
-                `File listed but not generated: ${file.path} (${file.type})`
+                `Skipping file processing: ${file.path} (type: ${file.type}, purpose: ${file.purpose})`
               );
-              processedFiles.push({
-                ...file,
-                status: 'pending',
-                note: 'File generation not implemented for this type',
-              });
             }
           } catch (error) {
-            console.error('Error processing file:', error);
-            processedFiles.push({
-              ...file,
-              status: 'error',
-              error: error instanceof Error ? error.message : 'Unknown error',
-            });
+            console.error(`Error processing file ${file.path}:`, error);
           }
         }
       }
