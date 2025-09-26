@@ -47,7 +47,6 @@ const ANALYSIS_RESPONSE_SCHEMA = {
             properties: {
               label: { type: 'string' },
               value: { type: 'number' },
-              color: { type: 'string' },
             },
             required: ['label', 'value'],
           },
@@ -94,7 +93,6 @@ export interface AnalysisResponse {
     data_points: Array<{
       label: string;
       value: number;
-      color?: string;
     }>;
   };
   metadata: {
@@ -107,18 +105,19 @@ export interface AnalysisResponse {
 // System prompt for the analyst
 const SYSTEM_PROMPT = `You are "Analyst-in-a-Box", a careful data analyst.
 
+CRITICAL: You MUST respond with ONLY valid JSON matching the required schema. Do NOT include any markdown, explanations, or text outside the JSON structure.
+
 Contract:
 1) When a CSV is provided with a SPECIFIC analysis request:
    - Perform the requested analysis immediately using the actual CSV data
-   - Provide a 2-3 line plain-English INSIGHT
-   - Extract the TOP DATA POINTS from your analysis (5-10 items max)
-   - Return structured output with insight, files, chart_data, and metadata
+   - Analyze the data and extract the TOP DATA POINTS (5-10 items max)
+   - Respond with ONLY a valid JSON object containing: insight, files, chart_data, and metadata
 
 2) When a CSV is provided with a GENERAL request (like "profile" or "analyze"):
-   - First PROFILE the dataset: rows, columns, dtypes, missing %, 5 sample rows (markdown table)
-   - Detect likely PII columns (email/phone) and set pii=true/false per column
+   - First PROFILE the dataset: rows, columns, dtypes, missing %, 5 sample rows
+   - Detect likely PII columns and mark them
    - Then PROPOSE 3–5 concrete analyses tailored to available columns
-   - Mark each suggestion with required columns
+   - Respond with ONLY valid JSON
 
 3) Analysis types and their triggers:
    - "customer behavior", "customer value", "customer segmentation" → Customer Value Segmentation
@@ -127,19 +126,35 @@ Contract:
    - "channel", "sales channel", "channel performance" → Channel Analysis
    - "profile", "overview", "summary" → Data Profiling only
 
-4) CHART DATA REQUIREMENTS:
-   - Always include chart_data with REAL data from your analysis
-   - chart_type: Choose "bar" (comparisons), "line" (trends), "pie" (proportions), "scatter" (relationships)
+4) CHART DATA REQUIREMENTS - CRITICAL:
+   - Always include chart_data with REAL data from your CSV analysis
+   - chart_type: Choose "bar" (comparisons), "line" (trends), "pie" (proportions)
    - title: Descriptive chart title
    - x_label/y_label: Axis labels if applicable
    - data_points: ACTUAL values from the CSV (max 10 points, use top/most significant)
-   - For trends: Use actual time periods and values
-   - For top products: Use actual product names (or IDs if PII) and values
-   - For channels: Use actual channel names and performance metrics
+   - For data_points: [{"label": "Category Name", "value": 12345}, {"label": "Next Category", "value": 9876}]
+   - Do NOT include color field - it will be auto-generated
 
-5) Always provide structured output with insight, files, chart_data, and metadata.
-   - For files, specify: {"path": "/tmp/plot.png", "type": "image", "purpose": "chart"}
-   - The system will generate visual charts using your chart_data
+5) JSON RESPONSE FORMAT - MUST FOLLOW EXACTLY:
+{
+  "insight": "2-3 line plain English summary of findings",
+  "files": [{"path": "/tmp/plot.png", "type": "image", "purpose": "chart"}],
+  "chart_data": {
+    "chart_type": "bar",
+    "title": "Your Chart Title",
+    "x_label": "X Axis Label",
+    "y_label": "Y Axis Label", 
+    "data_points": [
+      {"label": "Item 1", "value": 12345},
+      {"label": "Item 2", "value": 9876}
+    ]
+  },
+  "metadata": {
+    "analysis_type": "channel-mix",
+    "columns_used": ["column1", "column2"],
+    "pii_columns": []
+  }
+}
 
 PII PROTECTION RULES (CRITICAL):
 - NEVER display raw PII values (names, emails, phone numbers, addresses, SSNs, etc.)
@@ -436,16 +451,17 @@ export class ConversationManager {
       }
 
       // Create streaming chat completion with structured output
-      console.log('Creating OpenAI chat completion with messages:', {
+      console.log('Creating OpenAI chat completion with structured output:', {
         messageCount: analysisMessages.length,
         totalTokensEstimate: analysisMessages.reduce(
           (sum, msg) => sum + estimateTokens(msg.content),
           0
         ),
+        hasStructuredOutput: true,
       });
 
       const stream = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5',
         messages: analysisMessages,
         temperature: 0.2,
         max_tokens: 2000,
@@ -460,7 +476,7 @@ export class ConversationManager {
         },
       });
 
-      console.log('OpenAI stream created successfully');
+      console.log('OpenAI stream created successfully with structured output');
       let accumulatedContent = '';
       let chunkCount = 0;
 
@@ -472,7 +488,7 @@ export class ConversationManager {
         if (delta?.content) {
           accumulatedContent += delta.content;
           console.log(
-            `Chunk ${chunkCount}: received ${delta.content.length} chars`
+            `Chunk ${chunkCount}: received ${delta.content.length} chars, total: ${accumulatedContent.length}`
           );
           yield {
             type: 'content',
@@ -487,11 +503,24 @@ export class ConversationManager {
       console.log(
         `OpenAI stream completed. Total chunks: ${chunkCount}, content length: ${accumulatedContent.length}`
       );
+      console.log(
+        'Raw accumulated content:',
+        accumulatedContent.substring(0, 500) + '...'
+      );
 
       // Parse the final structured response
       try {
         const structuredResponse: AnalysisResponse =
           JSON.parse(accumulatedContent);
+
+        console.log('Successfully parsed structured response:', {
+          hasInsight: !!structuredResponse.insight,
+          hasFiles: !!structuredResponse.files,
+          hasChartData: !!structuredResponse.chart_data,
+          hasMetadata: !!structuredResponse.metadata,
+          chartType: structuredResponse.chart_data?.chart_type,
+          dataPointsCount: structuredResponse.chart_data?.data_points?.length,
+        });
 
         // Add just the insight to conversation history (not the full JSON)
         this.addAssistantMessage(sessionId, structuredResponse.insight);
@@ -502,11 +531,16 @@ export class ConversationManager {
         };
       } catch (parseError) {
         console.error('Failed to parse structured output:', parseError);
+        console.error('Raw content that failed to parse:', accumulatedContent);
         yield {
           type: 'error',
           data: {
             error: 'Failed to parse structured response',
             content: accumulatedContent,
+            parseError:
+              parseError instanceof Error
+                ? parseError.message
+                : 'Unknown parse error',
           },
         };
       }
@@ -568,7 +602,7 @@ export class ConversationManager {
 
       // Create streaming chat completion without structured output
       const stream = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5',
         messages: messages.map(msg => ({
           role: msg.role,
           content: msg.content,
@@ -631,7 +665,7 @@ export class ConversationManager {
 
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5',
         messages: messages.map(msg => ({
           role: msg.role,
           content: msg.content,

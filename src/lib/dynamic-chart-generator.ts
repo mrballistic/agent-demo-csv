@@ -116,11 +116,10 @@ function createBarChartConfig(
           label: chartData.y_label || 'Value',
           data: chartData.data_points.map(point => point.value),
           backgroundColor: chartData.data_points.map(
-            (point, index) => point.color || colors[index % colors.length]
+            (point, index) => colors[index % colors.length]
           ),
           borderColor: chartData.data_points.map((point, index) => {
-            const baseColor =
-              point.color || colors[index % colors.length] || '#3B82F6';
+            const baseColor = colors[index % colors.length] || '#3B82F6';
             return darkenColor(baseColor);
           }),
           borderWidth: 2,
@@ -237,7 +236,7 @@ function createPieChartConfig(
         {
           data: chartData.data_points.map(point => point.value),
           backgroundColor: chartData.data_points.map(
-            (point, index) => point.color || colors[index % colors.length]
+            (point, index) => colors[index % colors.length]
           ),
           borderColor: '#ffffff',
           borderWidth: 2,
