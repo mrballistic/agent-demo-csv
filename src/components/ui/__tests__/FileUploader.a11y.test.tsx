@@ -34,9 +34,13 @@ describe('FileUploader Accessibility', () => {
     );
 
     // Check instructions are properly labeled
-    expect(
-      screen.getByText(/Drag and drop your CSV file here/)
-    ).toHaveAttribute('id', 'upload-instructions');
+    // There may be multiple elements with this text; find the one with the correct id
+    const instructions = screen.getAllByText(
+      /Drag and drop your CSV file here/
+    );
+    const described = instructions.find(el => el.id === 'upload-instructions');
+    expect(described).toBeInTheDocument();
+    expect(described).toHaveAttribute('id', 'upload-instructions');
 
     // Check hidden file input has proper labeling
     const fileInput = screen.getByLabelText('Choose CSV file');

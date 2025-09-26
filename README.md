@@ -1,6 +1,6 @@
 # 🤖 AI Data Analyst Demo
 
-> 📊 Production-ready automated data analysis powered by OpenAI's Assistants API and Code Interpreter
+> 📊 Production-ready automated data analysis powered by OpenAI's Responses API
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14+-black?logo=next.js&logoColor=white)](https://nextjs.org/)

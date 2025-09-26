@@ -168,35 +168,61 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     return <IconComponent />;
   };
 
-  if (!fileId) {
-    return (
-      <Accordion disabled sx={{ mb: 1, opacity: 0.6 }}>
-        <AccordionSummary
-          expandIcon={<ExpandMore />}
-          aria-controls="quick-actions-content"
-          id="quick-actions-header"
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FlashOn color="disabled" />
-            <Typography variant="subtitle2" color="text.disabled">
-              Quick Actions
-            </Typography>
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Typography variant="body2" color="text.secondary">
-            Upload a CSV file to see analysis suggestions
-          </Typography>
-        </AccordionDetails>
-      </Accordion>
-    );
-  }
+  // Default actions for when no file is uploaded
+  const defaultActions: SuggestionItem[] = [
+    {
+      id: 'profile',
+      label: 'Profile Data',
+      description: 'Analyze data structure and quality',
+      requiredColumns: [],
+      analysisType: 'profile',
+      enabled: true,
+    },
+    {
+      id: 'trends',
+      label: 'Revenue Trends',
+      description: 'Visualize revenue over time',
+      requiredColumns: [],
+      analysisType: 'trend',
+      enabled: true,
+    },
+    {
+      id: 'top-products',
+      label: 'Top Products',
+      description: 'Identify best-selling products',
+      requiredColumns: [],
+      analysisType: 'top-sku',
+      enabled: true,
+    },
+    {
+      id: 'channel-mix',
+      label: 'Channel Analysis',
+      description: 'Breakdown by sales channel',
+      requiredColumns: [],
+      analysisType: 'channel-mix',
+      enabled: true,
+    },
+    {
+      id: 'export',
+      label: 'Export Report',
+      description: 'Download analysis as CSV',
+      requiredColumns: [],
+      analysisType: 'outlier',
+      enabled: true,
+    },
+  ];
+
+  const actionsToRender = fileId ? suggestions : defaultActions;
+
+  // Hide QuickActions until a file is uploaded
+  if (!fileId) return null;
 
   return (
     <Accordion
       expanded={expanded === 'quick-actions'}
       onChange={handleAccordionChange('quick-actions')}
       sx={{ mb: 1 }}
+      data-testid="quick-actions-accordion"
     >
       <AccordionSummary
         expandIcon={<ExpandMore />}
@@ -252,17 +278,17 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           </Alert>
         ) : (
           <>
-            {metadata && (
+            {metadata ? (
               <Box sx={{ mb: 2 }}>
                 <Chip
-                  label={`${metadata.columnCount} columns detected`}
+                  label={`${metadata?.columnCount ?? 0} columns detected`}
                   size="small"
                   variant="outlined"
                   color="info"
-                  aria-label={`Data contains ${metadata.columnCount} columns`}
+                  aria-label={`Data contains ${metadata?.columnCount ?? 0} columns`}
                 />
               </Box>
-            )}
+            ) : null}
 
             <Stack
               spacing={1}

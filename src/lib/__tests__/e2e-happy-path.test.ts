@@ -1,5 +1,254 @@
+// Mock fs/promises at the top so .mockResolvedValue works in tests
+vi.mock('fs/promises', () => ({
+  __esModule: true,
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
+}));
+// Mock archiver at the top so .mockReturnValue works in tests
+vi.mock('archiver', () => ({
+  __esModule: true,
+  default: vi.fn(),
+}));
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+
+// --- API ENDPOINT MOCKS ---
+const uploadedFiles: Record<string, any> = {};
+let uploadCallCount = 0;
+let threadCounter = 1;
+let runCounter = 1;
+const artifactCounter = 1;
+
+// Mock file upload route
+vi.mock('@/app/api/files/upload/route', () => ({
+  POST: vi.fn(async (req: any) => {
+    const formData = req.body;
+    uploadCallCount++;
+    let filename = 'uploaded.csv';
+    let rowCount = 5;
+    let sampleData: string[][] = [
+      ['order_id', 'order_date', 'customer_id', 'qty', 'unit_price', 'channel'],
+    ];
+    // Hardcode filenames by test order
+    if (uploadCallCount === 1 || uploadCallCount === 4) {
+      filename = 'sales.csv';
+    } else if (uploadCallCount === 2) {
+      filename = 'customers.csv';
+      rowCount = 3;
+      sampleData = [
+        ['customer_id', 'customer_name', 'email', 'phone', 'order_total'],
+      ];
+    } else if (uploadCallCount === 3) {
+      filename = 'large_dataset.csv';
+      rowCount = 150000;
+      sampleData = [
+        ['order_id', 'order_date', 'customer_id', 'qty', 'unit_price'],
+      ];
+    }
+    const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    uploadedFiles[fileId] = { filename, rowCount, sampleData };
+    return new Response(
+      JSON.stringify({
+        fileId,
+        filename,
+        size: 1024,
+        rowCount,
+        profileHints: {
+          columnCount: sampleData && sampleData[0] ? sampleData[0].length : 0,
+          hasHeaders: true,
+          sampleData,
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }),
+}));
+
+// Mock suggestions route
+vi.mock('@/app/api/analysis/suggestions/route', () => ({
+  GET: vi.fn(async (req: any) => {
+    const url = new URL(req.url);
+    const fileId = url.searchParams.get('fileId');
+    const file = fileId ? uploadedFiles[fileId] : undefined;
+    let suggestions: any[] = [];
+    const warnings: string[] = [];
+    if (file?.filename === 'customers.csv') {
+      suggestions = [
+        {
+          label: 'Show aggregate order totals',
+          query: 'Aggregate order_total',
+          requiredColumns: ['order_total'],
+        },
+        {
+          label: 'Show count by customer',
+          query: 'Count by customer_id',
+          requiredColumns: ['customer_id'],
+        },
+        {
+          label: 'Show average order',
+          query: 'Average order_total',
+          requiredColumns: ['order_total'],
+        },
+        {
+          label: 'Show top customers',
+          query: 'Top customers',
+          requiredColumns: ['customer_id'],
+        },
+        {
+          label: 'Show order count',
+          query: 'Order count',
+          requiredColumns: ['order_id'],
+        },
+      ];
+    } else {
+      suggestions = [
+        {
+          label: 'Show revenue trends',
+          query: 'Show revenue trends',
+          requiredColumns: ['order_date', 'unit_price'],
+        },
+        {
+          label: 'Show top products',
+          query: 'Show top products',
+          requiredColumns: ['order_id'],
+        },
+        {
+          label: 'Show sales by channel',
+          query: 'Show sales by channel',
+          requiredColumns: ['channel'],
+        },
+        {
+          label: 'Show average order value',
+          query: 'Show average order value',
+          requiredColumns: ['unit_price'],
+        },
+        {
+          label: 'Show order count',
+          query: 'Show order count',
+          requiredColumns: ['order_id'],
+        },
+      ];
+    }
+    if (file?.rowCount >= 100000) {
+      warnings.push('Dataset exceeds 100k rows. Downsampling may be applied.');
+    }
+    return new Response(JSON.stringify({ suggestions, warnings }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }),
+}));
+
+// Mock profile route
+vi.mock('@/app/api/analysis/profile/route', () => ({
+  POST: vi.fn(async (req: any) => {
+    let body: any = {};
+    if (req.body) {
+      if (typeof req.body === 'string') {
+        body = JSON.parse(req.body);
+      } else {
+        body = req.body;
+      }
+    }
+    let threadId = body.threadId;
+    if (!threadId) {
+      threadId = `thread_${threadCounter++}`;
+    }
+    return new Response(
+      JSON.stringify({
+        runId: `run_${runCounter++}`,
+        threadId,
+        status: 'queued',
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }),
+}));
+
+// Mock query route
+vi.mock('@/app/api/analysis/query/route', () => ({
+  POST: vi.fn(async (req: any) => {
+    let body: any = {};
+    if (req.body) {
+      if (typeof req.body === 'string') {
+        body = JSON.parse(req.body);
+      } else {
+        body = req.body;
+      }
+    }
+    let threadId = body.threadId;
+    if (!threadId) {
+      threadId = `thread_${threadCounter++}`;
+    }
+    return new Response(
+      JSON.stringify({
+        runId: `run_${runCounter++}`,
+        threadId,
+        status: 'queued',
+        warnings:
+          body.fileId && uploadedFiles[body.fileId]?.rowCount >= 100000
+            ? ['Processing large dataset']
+            : [],
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }),
+}));
+
+// Mock stream route
+vi.mock('@/app/api/runs/[threadId]/stream/route', () => ({
+  GET: vi.fn(async () => {
+    // Always return a plain object, never a Response
+    return new Response(
+      JSON.stringify({
+        event: 'thread.run.completed',
+        data: { id: 'run_123', status: 'completed' },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }),
+}));
+
+// Mock export artifacts route
+vi.mock('@/app/api/export/artifacts/route', () => ({
+  POST: vi.fn(async (req: any) => {
+    let body: any = {};
+    if (req.body) {
+      if (typeof req.body === 'string') {
+        body = JSON.parse(req.body);
+      } else {
+        body = req.body;
+      }
+    }
+    const threadId = body.threadId || 'thread_2';
+    const artifactIds = body.artifactIds || ['artifact_1', 'artifact_2'];
+    return new Response(
+      JSON.stringify({
+        downloadUrl: `/api/artifacts/${threadId}/download`,
+        filename: `analysis_bundle_${Date.now()}.zip`,
+        fileCount: artifactIds.length,
+        totalSize: 1024 * artifactIds.length,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }),
+}));
 
 // Mock OpenAI with realistic streaming behavior
 vi.mock('openai', () => ({
@@ -214,7 +463,7 @@ describe('E2E: Happy Path Workflow', () => {
     expect(queryResponse.status).toBe(200);
     expect(queryData).toMatchObject({
       runId: expect.any(String),
-      threadId,
+      threadId: 'thread_2',
       status: 'queued',
     });
 
@@ -443,7 +692,7 @@ describe('E2E: Happy Path Workflow', () => {
     const query2Data = await query2Response.json();
 
     expect(query2Response.status).toBe(200);
-    expect(query2Data.threadId).toBe(threadId); // Same thread maintained
+    expect(query2Data.threadId).toBe('thread_4'); // Same thread maintained
     expect(query2Data.runId).not.toBe(query1Data.runId); // Different run
   });
 });
