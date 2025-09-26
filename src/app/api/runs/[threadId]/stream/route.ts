@@ -10,6 +10,10 @@ export const runtime = 'nodejs';
 // Track active streaming connections to prevent concurrent runs
 const activeStreams = new Map<string, boolean>();
 
+// Track recent runs to prevent duplicates (threadId -> last run timestamp)
+const recentRuns = new Map<string, number>();
+const RUN_COOLDOWN_MS = 10000; // 10 seconds between runs for same thread
+
 // Types for streaming events
 interface StreamEvent {
   type: string;
@@ -107,6 +111,7 @@ export async function GET(
   }
 
   // Mark this thread as having an active stream
+  console.log(`Marking stream as active for threadId: ${threadId}`);
   activeStreams.set(threadId, true);
 
   // Create Server-Sent Events stream
@@ -174,6 +179,7 @@ export async function GET(
           }
         } finally {
           // Always cleanup the active stream marker
+          console.log(`Cleaning up active stream for threadId: ${threadId}`);
           activeStreams.delete(threadId);
           try {
             if (!isControllerClosed) {
@@ -205,9 +211,29 @@ async function streamRealOpenAIRun(
   threadId: string,
   sessionId: string,
   send: (event: StreamEvent) => void
-) {
+): Promise<{ runId: string; skipped?: boolean }> {
   let runId = '';
   const startTime = Date.now();
+
+  // Check for recent runs to prevent duplicates
+  const lastRunTime = recentRuns.get(threadId);
+  if (lastRunTime && startTime - lastRunTime < RUN_COOLDOWN_MS) {
+    console.log(
+      `Skipping run for thread ${threadId} - cooldown period (${startTime - lastRunTime}ms ago)`
+    );
+
+    // Send a connection established event but don't create a new run
+    send({
+      type: 'connection.established',
+      data: { threadId, sessionId, skipped: true },
+      timestamp: startTime,
+    });
+
+    return { runId: 'skipped', skipped: true };
+  }
+
+  // Update last run time
+  recentRuns.set(threadId, startTime);
 
   // Track accumulated message content per message ID
   const messageContent = new Map<string, string>();
@@ -391,6 +417,7 @@ async function streamRealOpenAIRun(
     );
 
     console.log('Real OpenAI streaming completed:', result);
+    return { runId: result.runId || 'completed' };
   } catch (error) {
     console.error('Real OpenAI streaming failed:', error);
 
@@ -431,7 +458,7 @@ async function streamRealOpenAIRun(
           );
 
           console.log('Retry streaming completed:', retryResult);
-          return;
+          return { runId: retryResult.runId || 'retry_completed' };
         } catch (cancelError) {
           console.error('Failed to cancel existing run:', cancelError);
         }
@@ -441,7 +468,7 @@ async function streamRealOpenAIRun(
       // Fall back to simulation if cancellation failed
       try {
         await simulateStreamingRun(threadId, sessionId, send);
-        return;
+        return { runId: 'simulation_completed' };
       } catch (simulationError) {
         console.error('Simulation also failed:', simulationError);
       }

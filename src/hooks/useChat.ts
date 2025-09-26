@@ -34,6 +34,7 @@ interface UseChatReturn {
   cancelRun: () => Promise<void>;
   clearMessages: () => void;
   addMessage: (message: ChatMessage) => void;
+  resetConnection: () => void;
 }
 
 export function useChat({
@@ -52,6 +53,11 @@ export function useChat({
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
+  const lastConnectionTimeRef = useRef<number>(0);
+  const messageCounterRef = useRef<number>(0); // Counter for unique message IDs
+  const isConnectingRef = useRef<boolean>(false); // Prevent multiple simultaneous connections
+  const shouldReconnectRef = useRef<boolean>(true); // Control reconnection behavior
+  const CONNECTION_DEBOUNCE_MS = 5000; // 5 seconds between reconnections
 
   // Create refs for callbacks to avoid dependencies
   const onArtifactCreatedRef = useRef(onArtifactCreated);
@@ -142,29 +148,79 @@ export function useChat({
     setMessages(prev => [...prev, artifactMessage]);
   }, []);
 
-  // Set up SSE connection - inline to avoid dependency issues
+  // Set up SSE connection
   useEffect(() => {
-    if (!threadId) {
-      // Cleanup when no threadId
+    console.log('[useChat] SSE useEffect triggered with threadId:', threadId);
+
+    if (!threadId || threadId === 'undefined') {
+      // Cleanup when no valid threadId
       if (eventSourceRef.current) {
+        console.log(
+          '[useChat] Closing existing EventSource (no valid threadId)'
+        );
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
       setIsConnected(false);
+      lastConnectionTimeRef.current = 0;
+      isConnectingRef.current = false;
+      // Reset reconnection flag for new analysis
+      shouldReconnectRef.current = true;
+      return;
+    }
+
+    // Don't reconnect if we've been explicitly disabled
+    if (!shouldReconnectRef.current) {
+      console.log(
+        '[useChat] Reconnection disabled, skipping connection attempt'
+      );
+      return;
+    }
+
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      console.log('[useChat] Already connecting, skipping duplicate attempt');
+      return;
+    }
+
+    // Client-side debouncing to prevent rapid reconnections
+    const now = Date.now();
+    const timeSinceLastConnection = now - lastConnectionTimeRef.current;
+    if (
+      timeSinceLastConnection < CONNECTION_DEBOUNCE_MS &&
+      eventSourceRef.current
+    ) {
+      console.log(
+        `[useChat] Skipping connection - too soon (${timeSinceLastConnection}ms ago)`
+      );
+      return;
+    }
+
+    // Don't reconnect if explicitly disabled
+    if (!shouldReconnectRef.current) {
+      console.log('[useChat] Reconnection disabled, skipping');
       return;
     }
 
     // Close existing connection before creating new one
     if (eventSourceRef.current) {
+      console.log(
+        '[useChat] Closing existing EventSource before creating new one'
+      );
       eventSourceRef.current.close();
     }
 
+    console.log('[useChat] Creating new EventSource for threadId:', threadId);
+    isConnectingRef.current = true;
+    lastConnectionTimeRef.current = now;
     const eventSource = new EventSource(`/api/runs/${threadId}/stream`);
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
+      console.log('[useChat] EventSource connection opened');
       setIsConnected(true);
       setConnectionError(null);
+      isConnectingRef.current = false;
     };
 
     eventSource.onmessage = event => {
@@ -193,13 +249,37 @@ export function useChat({
             );
             // Add queue position message if available
             if (streamEvent.data.queuePosition) {
+              messageCounterRef.current += 1;
               const queueMessage: ChatMessage = {
-                id: `queue_${Date.now()}`,
+                id: `queue_${Date.now()}_${messageCounterRef.current}`,
                 role: 'system',
                 content: `⏳ Queued (position ${streamEvent.data.queuePosition})`,
                 timestamp: new Date(),
               };
-              setMessages(prev => [...prev, queueMessage]);
+
+              setMessages(prev => {
+                // Check for duplicate by ID or similar content
+                const isDuplicate = prev.some(
+                  msg =>
+                    msg.id === queueMessage.id ||
+                    (msg.role === queueMessage.role &&
+                      msg.content === queueMessage.content &&
+                      Math.abs(
+                        msg.timestamp.getTime() -
+                          queueMessage.timestamp.getTime()
+                      ) < 1000)
+                );
+
+                if (isDuplicate) {
+                  console.log(
+                    '[useChat] Preventing duplicate message:',
+                    queueMessage.id
+                  );
+                  return prev;
+                }
+
+                return [...prev, queueMessage];
+              });
             }
             break;
 
@@ -277,13 +357,36 @@ export function useChat({
                   errorContent += '\\n\\n💡 Click to retry your request.';
                 }
               }
+              messageCounterRef.current += 1;
               const errorMessage: ChatMessage = {
-                id: `error_${Date.now()}`,
+                id: `error_${Date.now()}_${messageCounterRef.current}`,
                 role: 'system',
                 content: errorContent,
                 timestamp: new Date(),
               };
-              setMessages(prev => [...prev, errorMessage]);
+
+              setMessages(prev => {
+                const isDuplicate = prev.some(
+                  msg =>
+                    msg.id === errorMessage.id ||
+                    (msg.role === errorMessage.role &&
+                      msg.content === errorMessage.content &&
+                      Math.abs(
+                        msg.timestamp.getTime() -
+                          errorMessage.timestamp.getTime()
+                      ) < 1000)
+                );
+
+                if (isDuplicate) {
+                  console.log(
+                    '[useChat] Preventing duplicate message:',
+                    errorMessage.id
+                  );
+                  return prev;
+                }
+
+                return [...prev, errorMessage];
+              });
             }
             break;
 
@@ -293,25 +396,71 @@ export function useChat({
             currentRunIdRef.current = null;
             onRunStatusChangeRef.current?.('cancelled');
             onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+            messageCounterRef.current += 1;
             const cancelMessage: ChatMessage = {
-              id: `cancel_${Date.now()}`,
+              id: `cancel_${Date.now()}_${messageCounterRef.current}`,
               role: 'system',
               content: '🛑 Analysis cancelled',
               timestamp: new Date(),
             };
-            setMessages(prev => [...prev, cancelMessage]);
+
+            setMessages(prev => {
+              const isDuplicate = prev.some(
+                msg =>
+                  msg.id === cancelMessage.id ||
+                  (msg.role === cancelMessage.role &&
+                    msg.content === cancelMessage.content &&
+                    Math.abs(
+                      msg.timestamp.getTime() -
+                        cancelMessage.timestamp.getTime()
+                    ) < 1000)
+              );
+
+              if (isDuplicate) {
+                console.log(
+                  '[useChat] Preventing duplicate message:',
+                  cancelMessage.id
+                );
+                return prev;
+              }
+
+              return [...prev, cancelMessage];
+            });
             break;
 
           case 'artifact.created':
             onArtifactCreatedRef.current?.(streamEvent.data);
             {
+              messageCounterRef.current += 1;
               const artifactMessage: ChatMessage = {
-                id: `artifact_${Date.now()}`,
+                id: `artifact_${Date.now()}_${messageCounterRef.current}`,
                 role: 'system',
                 content: `📄 Created: ${streamEvent.data.filename}`,
                 timestamp: new Date(),
               };
-              setMessages(prev => [...prev, artifactMessage]);
+
+              setMessages(prev => {
+                const isDuplicate = prev.some(
+                  msg =>
+                    msg.id === artifactMessage.id ||
+                    (msg.role === artifactMessage.role &&
+                      msg.content === artifactMessage.content &&
+                      Math.abs(
+                        msg.timestamp.getTime() -
+                          artifactMessage.timestamp.getTime()
+                      ) < 1000)
+                );
+
+                if (isDuplicate) {
+                  console.log(
+                    '[useChat] Preventing duplicate message:',
+                    artifactMessage.id
+                  );
+                  return prev;
+                }
+
+                return [...prev, artifactMessage];
+              });
             }
             break;
 
@@ -329,37 +478,51 @@ export function useChat({
     };
 
     eventSource.onerror = error => {
-      console.error('SSE connection error:', error);
+      console.error('[useChat] SSE connection error:', error);
       setIsConnected(false);
+      isConnectingRef.current = false;
 
-      // Check if this is a 404 error (session expired)
-      if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-        setConnectionError(
-          'Session expired or server restarted. Please refresh the page and start a new analysis.'
-        );
+      // Clean up current connection
+      if (eventSourceRef.current) {
+        console.log('[useChat] Closing EventSource due to error');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      // Check the readyState to understand the type of closure
+      const eventSource = error.target as EventSource;
+
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        // Normal closure (stream ended successfully)
+        console.log('[useChat] Stream ended normally by server');
+        setConnectionError(null); // Clear any previous errors
+        // Allow reconnection for future analyses
+        shouldReconnectRef.current = true;
       } else {
-        setConnectionError('Connection lost. Attempting to reconnect...');
-
-        // Attempt to reconnect after a delay
+        // Actual connection error
+        console.log('[useChat] Actual connection error occurred');
+        setConnectionError(
+          'Connection error occurred. The analysis may continue to work.'
+        );
+        // Temporarily disable reconnection but allow it to reset
+        shouldReconnectRef.current = false;
+        // Reset reconnection flag after a short delay
         setTimeout(() => {
-          if (
-            eventSourceRef.current?.readyState === EventSource.CLOSED &&
-            threadId
-          ) {
-            const retryEventSource = new EventSource(
-              `/api/runs/${threadId}/stream`
-            );
-            eventSourceRef.current = retryEventSource;
-          }
-        }, 3000);
+          console.log(
+            '[useChat] Re-enabling reconnection after error cooldown'
+          );
+          shouldReconnectRef.current = true;
+        }, CONNECTION_DEBOUNCE_MS);
       }
     };
 
     return () => {
+      console.log('[useChat] Cleaning up EventSource connection');
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      isConnectingRef.current = false;
     };
   }, [threadId]); // Only depend on threadId
 
@@ -371,14 +534,35 @@ export function useChat({
       }
 
       // Add optimistic user message
+      messageCounterRef.current += 1;
       const userMessage: ChatMessage = {
-        id: `user_${Date.now()}`,
+        id: `user_${Date.now()}_${messageCounterRef.current}`,
         role: 'user',
         content: content,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, userMessage]);
+      setMessages(prev => {
+        const isDuplicate = prev.some(
+          msg =>
+            msg.id === userMessage.id ||
+            (msg.role === userMessage.role &&
+              msg.content === userMessage.content &&
+              Math.abs(
+                msg.timestamp.getTime() - userMessage.timestamp.getTime()
+              ) < 1000)
+        );
+
+        if (isDuplicate) {
+          console.log(
+            '[useChat] Preventing duplicate message:',
+            userMessage.id
+          );
+          return prev;
+        }
+
+        return [...prev, userMessage];
+      });
 
       try {
         // Send message to API
@@ -403,8 +587,9 @@ export function useChat({
         console.error('Failed to send message:', error);
 
         // Add error message
+        messageCounterRef.current += 1;
         const errorMessage: ChatMessage = {
-          id: `error_${Date.now()}`,
+          id: `error_${Date.now()}_${messageCounterRef.current}`,
           role: 'system',
           content: `Failed to send message: ${
             error instanceof Error ? error.message : 'Unknown error'
@@ -412,7 +597,27 @@ export function useChat({
           timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages(prev => {
+          const isDuplicate = prev.some(
+            msg =>
+              msg.id === errorMessage.id ||
+              (msg.role === errorMessage.role &&
+                msg.content === errorMessage.content &&
+                Math.abs(
+                  msg.timestamp.getTime() - errorMessage.timestamp.getTime()
+                ) < 1000)
+          );
+
+          if (isDuplicate) {
+            console.log(
+              '[useChat] Preventing duplicate message:',
+              errorMessage.id
+            );
+            return prev;
+          }
+
+          return [...prev, errorMessage];
+        });
       }
     },
     [threadId]
@@ -447,9 +652,35 @@ export function useChat({
     setMessages([]);
   }, []);
 
+  // Reset connection state (for manual restart)
+  const resetConnection = useCallback(() => {
+    console.log('[useChat] Resetting connection state');
+    shouldReconnectRef.current = true;
+    setConnectionError(null);
+    setIsConnected(false);
+    isConnectingRef.current = false;
+    lastConnectionTimeRef.current = 0;
+  }, []);
+
   // Add message manually
   const addMessage = useCallback((message: ChatMessage) => {
-    setMessages(prev => [...prev, message]);
+    setMessages(prev => {
+      const isDuplicate = prev.some(
+        msg =>
+          msg.id === message.id ||
+          (msg.role === message.role &&
+            msg.content === message.content &&
+            Math.abs(msg.timestamp.getTime() - message.timestamp.getTime()) <
+              1000)
+      );
+
+      if (isDuplicate) {
+        console.log('[useChat] Preventing duplicate message:', message.id);
+        return prev;
+      }
+
+      return [...prev, message];
+    });
   }, []);
 
   return {
@@ -462,5 +693,6 @@ export function useChat({
     cancelRun,
     clearMessages,
     addMessage,
+    resetConnection,
   };
 }

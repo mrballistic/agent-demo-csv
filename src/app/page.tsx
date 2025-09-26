@@ -407,13 +407,7 @@ export default function Home() {
                   flexDirection: 'column',
                 }}
               >
-                {connectionError && (
-                  <Alert severity="warning" sx={{ m: 2 }}>
-                    {connectionError}
-                  </Alert>
-                )}
-
-                <Box sx={{ flex: 1, m: 2, mt: connectionError ? 0 : 2 }}>
+                <Box sx={{ flex: 1, m: 2 }}>
                   {threadId ? (
                     <ChatPane
                       threadId={threadId}
