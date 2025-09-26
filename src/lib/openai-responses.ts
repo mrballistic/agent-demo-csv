@@ -52,7 +52,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
           },
         },
       },
-      required: ['chart_type', 'title', 'data_points'],
+      required: ['chart_type', 'title', 'x_label', 'y_label', 'data_points'],
     },
     metadata: {
       type: 'object',
@@ -88,8 +88,8 @@ export interface AnalysisResponse {
   chart_data: {
     chart_type: 'bar' | 'line' | 'pie' | 'scatter' | 'histogram';
     title: string;
-    x_label?: string;
-    y_label?: string;
+    x_label: string;
+    y_label: string;
     data_points: Array<{
       label: string;
       value: number;
@@ -463,8 +463,7 @@ export class ConversationManager {
       const stream = await this.client.chat.completions.create({
         model: 'gpt-5',
         messages: analysisMessages,
-        temperature: 0.2,
-        max_tokens: 2000,
+        max_completion_tokens: 2000,
         stream: true,
         response_format: {
           type: 'json_schema',
@@ -607,8 +606,7 @@ export class ConversationManager {
           role: msg.role,
           content: msg.content,
         })),
-        temperature: 0.2,
-        max_tokens: 2000,
+        max_completion_tokens: 2000,
         stream: true,
       });
 
@@ -670,8 +668,7 @@ export class ConversationManager {
           role: msg.role,
           content: msg.content,
         })),
-        temperature: 0.2,
-        max_tokens: 2000,
+        max_completion_tokens: 2000,
         response_format: {
           type: 'json_schema',
           json_schema: {
