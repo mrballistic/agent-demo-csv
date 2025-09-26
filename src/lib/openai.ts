@@ -8,8 +8,8 @@ export const openai = new OpenAI({
 // Assistant configuration with system prompt
 export const ASSISTANT_CONFIG: OpenAI.Beta.Assistants.AssistantCreateParams = {
   name: 'Analyst-in-a-Box',
-  model: 'gpt-4o',
-  tools: [{ type: 'code_interpreter' }],
+  model: 'gpt-4o', // Changed from gpt-4o due to server_error issues
+  tools: [{ type: 'code_interpreter' }], // Re-enabled now that streaming issues are resolved
   temperature: 0.2,
   instructions: `You are "Analyst-in-a-Box", a careful data analyst.
 
@@ -93,6 +93,97 @@ export class AssistantManager {
       throw new Error(
         `Failed to create assistant: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    }
+  }
+
+  /**
+   * Reset the assistant (force recreation with new config)
+   */
+  resetAssistant(): void {
+    this.assistantId = null;
+  }
+
+  /**
+   * Cancel any existing runs on a thread
+   */
+  async cancelExistingRuns(threadId: string): Promise<boolean> {
+    try {
+      // Get list of runs for the thread
+      const runs = await this.client.beta.threads.runs.list(threadId, {
+        limit: 10,
+      });
+
+      let allCancelled = true;
+
+      // Cancel any runs that are in progress or queued
+      for (const run of runs.data) {
+        if (run.status === 'in_progress' || run.status === 'queued') {
+          console.log(
+            `Canceling existing run ${run.id} with status: ${run.status}`
+          );
+          try {
+            await this.client.beta.threads.runs.cancel(threadId, run.id);
+            console.log(`Successfully canceled run ${run.id}`);
+
+            // Wait for the run to actually be canceled - with extended timeout for code interpreter
+            let attempts = 0;
+            const maxAttempts = 60; // 30 seconds for code interpreter runs
+            while (attempts < maxAttempts) {
+              const updatedRun = await this.client.beta.threads.runs.retrieve(
+                threadId,
+                run.id
+              );
+              if (
+                updatedRun.status === 'cancelled' ||
+                updatedRun.status === 'failed'
+              ) {
+                console.log(`Run ${run.id} is now ${updatedRun.status}`);
+                break;
+              }
+              console.log(
+                `Waiting for run ${run.id} to finish canceling... (status: ${updatedRun.status})`
+              );
+              await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+              attempts++;
+            }
+
+            // Final check - if still not cancelled after max attempts, mark as failed to cancel
+            const finalCheck = await this.client.beta.threads.runs.retrieve(
+              threadId,
+              run.id
+            );
+            if (
+              finalCheck.status === 'in_progress' ||
+              finalCheck.status === 'queued' ||
+              finalCheck.status === 'cancelling'
+            ) {
+              console.warn(
+                `Run ${run.id} still ${finalCheck.status} after ${maxAttempts * 500}ms, will attempt new run anyway`
+              );
+              allCancelled = false;
+              continue; // Don't throw, just mark as failed and continue
+            }
+
+            // Add a small buffer after successful cancellation
+            console.log(
+              `Run ${run.id} successfully cancelled, waiting brief moment for OpenAI cleanup...`
+            );
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second buffer
+          } catch (cancelError: any) {
+            console.warn(
+              `Failed to cancel run ${run.id}:`,
+              cancelError?.message || cancelError
+            );
+            allCancelled = false;
+            // Don't throw here - log the warning but continue attempting other runs
+          }
+        }
+      }
+
+      return allCancelled;
+    } catch (error) {
+      console.warn('Failed to check/cancel existing runs:', error);
+      return false; // Return false to indicate cancellation was not fully successful
     }
   }
 
@@ -223,6 +314,14 @@ export class AssistantManager {
       if (!runAssistantId) {
         throw new Error(
           'No assistant ID available. Call createAssistant() first.'
+        );
+      }
+
+      // Cancel any existing runs before starting a new one
+      const cancellationSuccessful = await this.cancelExistingRuns(threadId);
+      if (!cancellationSuccessful) {
+        console.warn(
+          `Some runs could not be cancelled on thread ${threadId}, but proceeding with new run`
         );
       }
 

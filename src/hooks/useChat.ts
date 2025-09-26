@@ -10,7 +10,7 @@ interface StreamEvent {
 }
 
 interface UseChatOptions {
-  threadId?: string;
+  threadId?: string | undefined;
   onArtifactCreated?: (artifact: any) => void;
   onRunStatusChange?: (
     status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -148,11 +148,18 @@ export function useChat({
     setMessages(prev => [...prev, artifactMessage]);
   }, []);
 
-  // Set up SSE connection
+  // Set up SSE connection - only when we have a valid threadId
   useEffect(() => {
-    console.log('[useChat] SSE useEffect triggered with threadId:', threadId);
+    // Skip logging and processing for invalid threadIds to reduce noise
+    if (!threadId || threadId === 'undefined' || threadId.startsWith('null')) {
+      // Only log if we have some threadId value (not null/undefined)
+      if (threadId) {
+        console.log(
+          '[useChat] Skipping SSE setup for invalid threadId:',
+          threadId
+        );
+      }
 
-    if (!threadId || threadId === 'undefined') {
       // Cleanup when no valid threadId
       if (eventSourceRef.current) {
         console.log(
@@ -168,6 +175,8 @@ export function useChat({
       shouldReconnectRef.current = true;
       return;
     }
+
+    console.log('[useChat] SSE useEffect triggered with threadId:', threadId);
 
     // Don't reconnect if we've been explicitly disabled
     if (!shouldReconnectRef.current) {
@@ -478,13 +487,12 @@ export function useChat({
     };
 
     eventSource.onerror = error => {
-      console.error('[useChat] SSE connection error:', error);
+      console.log('[useChat] EventSource error event fired');
       setIsConnected(false);
       isConnectingRef.current = false;
 
       // Clean up current connection
       if (eventSourceRef.current) {
-        console.log('[useChat] Closing EventSource due to error');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
@@ -492,25 +500,36 @@ export function useChat({
       // Check the readyState to understand the type of closure
       const eventSource = error.target as EventSource;
 
+      // If readyState is CLOSED, this is likely normal completion, not an error
       if (eventSource?.readyState === EventSource.CLOSED) {
-        // Normal closure (stream ended successfully)
-        console.log('[useChat] Stream ended normally by server');
+        console.log('[useChat] Stream completed successfully');
         setConnectionError(null); // Clear any previous errors
-        // Allow reconnection for future analyses
+        // Allow reconnection for future analyses - this is normal completion
         shouldReconnectRef.current = true;
-      } else {
-        // Actual connection error
-        console.log('[useChat] Actual connection error occurred');
+      } else if (eventSource?.readyState === EventSource.CONNECTING) {
+        // Connection failed while trying to connect
+        console.log('[useChat] Connection failed during initial connection');
         setConnectionError(
-          'Connection error occurred. The analysis may continue to work.'
+          'Failed to connect to analysis service. Please try again.'
         );
-        // Temporarily disable reconnection but allow it to reset
         shouldReconnectRef.current = false;
-        // Reset reconnection flag after a short delay
+        // Re-enable after a delay
         setTimeout(() => {
           console.log(
-            '[useChat] Re-enabling reconnection after error cooldown'
+            '[useChat] Re-enabling reconnection after connection failure'
           );
+          shouldReconnectRef.current = true;
+        }, CONNECTION_DEBOUNCE_MS);
+      } else {
+        // Some other error state
+        console.log('[useChat] Unknown EventSource error occurred');
+        setConnectionError(
+          'Connection error occurred. The analysis should still work.'
+        );
+        // Temporarily disable reconnection
+        shouldReconnectRef.current = false;
+        setTimeout(() => {
+          console.log('[useChat] Re-enabling reconnection after unknown error');
           shouldReconnectRef.current = true;
         }, CONNECTION_DEBOUNCE_MS);
       }
@@ -524,7 +543,7 @@ export function useChat({
       }
       isConnectingRef.current = false;
     };
-  }, [threadId]); // Only depend on threadId
+  }, [threadId]); // Depend on threadId but exit early for invalid values
 
   // Send message
   const sendMessage = useCallback(

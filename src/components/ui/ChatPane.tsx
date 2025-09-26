@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import {
   Box,
   Paper,
@@ -422,49 +425,143 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                         ? 'AI responded:'
                         : 'System message:'}
                   </Box>
-                  <Typography
-                    variant="body1"
+                  <Box
                     sx={{
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
+                      '& p': { mb: 1 },
+                      '& pre': {
+                        bgcolor: 'grey.100',
+                        p: 1,
+                        borderRadius: 1,
+                        overflow: 'auto',
+                      },
+                      '& code': {
+                        bgcolor: 'grey.100',
+                        p: 0.5,
+                        borderRadius: 0.5,
+                        fontSize: '0.875em',
+                        fontFamily: 'monospace',
+                      },
+                      '& blockquote': {
+                        borderLeft: '4px solid',
+                        borderColor: 'primary.main',
+                        pl: 2,
+                        ml: 0,
+                        fontStyle: 'italic',
+                      },
+                      '& ul, & ol': {
+                        pl: 2,
+                      },
+                      '& table': {
+                        borderCollapse: 'collapse',
+                        width: '100%',
+                        mb: 1,
+                      },
+                      '& th, & td': {
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        p: 1,
+                        textAlign: 'left',
+                      },
+                      '& th': {
+                        bgcolor: 'grey.50',
+                        fontWeight: 'bold',
+                      },
                     }}
                   >
-                    {message.content}
-                    {message.isStreaming && (
-                      <>
-                        <Box
-                          component="span"
-                          sx={{
-                            display: 'inline-block',
-                            width: 2,
-                            height: '1.2em',
-                            bgcolor: 'primary.main',
-                            ml: 0.5,
-                            animation: 'blink 1s infinite',
-                            '@keyframes blink': {
-                              '0%, 50%': { opacity: 1 },
-                              '51%, 100%': { opacity: 0 },
-                            },
-                          }}
-                          aria-hidden="true"
-                        />
-                        <Box sx={srOnlyStyles} aria-live="polite">
-                          AI is typing...
-                        </Box>
-                      </>
-                    )}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        // Override paragraph to use MUI Typography
+                        p: ({ children }) => (
+                          <Typography
+                            variant="body1"
+                            sx={{
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                              mb: 1,
+                            }}
+                          >
+                            {children}
+                          </Typography>
+                        ),
+                        // Override code to ensure proper styling
+                        code: ({ children, className }) => {
+                          const isInline = !className?.includes('language-');
+                          return (
+                            <Box
+                              component={isInline ? 'code' : 'pre'}
+                              sx={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.875em',
+                                ...(isInline
+                                  ? {
+                                      bgcolor: 'grey.100',
+                                      px: 0.5,
+                                      py: 0.25,
+                                      borderRadius: 0.5,
+                                      display: 'inline',
+                                    }
+                                  : {
+                                      bgcolor: 'grey.100',
+                                      p: 1,
+                                      borderRadius: 1,
+                                      overflow: 'auto',
+                                      display: 'block',
+                                      whiteSpace: 'pre',
+                                    }),
+                              }}
+                            >
+                              {children}
+                            </Box>
+                          );
+                        },
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </Box>
+                  {message.isStreaming && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        mt: 1,
+                      }}
+                    >
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-block',
+                          width: 2,
+                          height: '1.2em',
+                          bgcolor: 'primary.main',
+                          animation: 'blink 1s infinite',
+                          '@keyframes blink': {
+                            '0%, 50%': { opacity: 1 },
+                            '51%, 100%': { opacity: 0 },
+                          },
+                        }}
+                        aria-hidden="true"
+                      />
+                      <Box sx={srOnlyStyles} aria-live="polite">
+                        AI is typing...
+                      </Box>
+                    </Box>
+                  )}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: 'block' }}
+                  >
                     {message.timestamp.toLocaleTimeString()}
                     {message.isStreaming && (
-                      <>
-                        <CircularProgress
-                          size={12}
-                          sx={{ ml: 1 }}
-                          aria-hidden="true"
-                        />
-                        <Box sx={srOnlyStyles}>Processing response</Box>
-                      </>
+                      <CircularProgress
+                        size={12}
+                        sx={{ ml: 1 }}
+                        aria-hidden="true"
+                      />
                     )}
                   </Typography>
                 </Box>

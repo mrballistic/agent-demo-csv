@@ -104,16 +104,12 @@ export default function Home() {
     sendMessage,
     cancelRun,
     addMessage,
-  } = useChat(
-    threadId
-      ? {
-          threadId,
-          onArtifactCreated: handleArtifactCreated,
-          onRunStatusChange: handleRunStatusChange,
-          onQueueUpdate: handleQueueUpdate,
-        }
-      : {}
-  );
+  } = useChat({
+    threadId: threadId ?? undefined,
+    onArtifactCreated: handleArtifactCreated,
+    onRunStatusChange: handleRunStatusChange,
+    onQueueUpdate: handleQueueUpdate,
+  });
 
   // Initialize thread on mount - will be replaced with real thread when profiling starts
   useEffect(() => {

@@ -155,8 +155,28 @@ export async function GET(
             process.env.OPENAI_API_KEY !== 'your-openai-api-key-here';
 
           if (hasOpenAIKey) {
-            // Use real OpenAI streaming
-            await streamRealOpenAIRun(threadId, session.id, send);
+            // Use real OpenAI streaming with fallback to simulation
+            try {
+              await streamRealOpenAIRun(threadId, session.id, send);
+            } catch (openaiError) {
+              console.error(
+                'OpenAI streaming failed, running diagnostics before fallback:',
+                openaiError
+              );
+
+              // Run diagnostics to understand why OpenAI failed
+              try {
+                const { diagnoseOpenAIIssue, logDiagnosticResults } =
+                  await import('@/lib/openai-diagnostics');
+                const diagnosticResults = await diagnoseOpenAIIssue(threadId);
+                logDiagnosticResults(diagnosticResults);
+              } catch (diagError) {
+                console.error('Diagnostic failed:', diagError);
+              }
+
+              // Fall back to simulation when OpenAI fails
+              await simulateStreamingRun(threadId, session.id, send);
+            }
           } else {
             // Fall back to simulation for demo
             await simulateStreamingRun(threadId, session.id, send);
@@ -214,6 +234,8 @@ async function streamRealOpenAIRun(
 ): Promise<{ runId: string; skipped?: boolean }> {
   let runId = '';
   const startTime = Date.now();
+  let runFailed = false;
+  let failureMessage = '';
 
   // Check for recent runs to prevent duplicates
   const lastRunTime = recentRuns.get(threadId);
@@ -240,11 +262,24 @@ async function streamRealOpenAIRun(
 
   try {
     // Ensure assistant exists before streaming
+    console.log(
+      `[streamRealOpenAIRun] Creating assistant for thread ${threadId}`
+    );
     await assistantManager.createAssistant();
+    console.log(
+      `[streamRealOpenAIRun] Assistant created, starting streaming run for thread ${threadId}`
+    );
 
     const result = await assistantManager.processStreamingRun(
       threadId,
       event => {
+        // Log all OpenAI events for debugging
+        console.log(
+          `[streamRealOpenAIRun] OpenAI event:`,
+          event.event,
+          event.data?.id || ''
+        );
+
         // Transform OpenAI events to our format
         const timestamp = Date.now();
 
@@ -309,26 +344,51 @@ async function streamRealOpenAIRun(
             cleanupRunFromQuery(event.data.id);
             break;
 
+          case 'thread.run.incomplete':
+            // Handle incomplete runs (e.g., hit token limits but still produced useful output)
+            runQueue.markRunCompleted(runId, true);
+            send({
+              type: 'run.completed',
+              data: {
+                runId: event.data.id,
+                threadId,
+                status: 'incomplete',
+                elapsedTime: Date.now() - startTime,
+                incomplete_details: event.data.incomplete_details,
+              },
+              timestamp,
+            });
+            // Clean up run tracking
+            cleanupRunFromQuery(event.data.id);
+            break;
+
           case 'thread.run.failed':
             const errorMessage = event.data.last_error?.message || 'Run failed';
             const errorType = categorizeError(errorMessage);
 
+            // Log detailed error information for debugging
+            console.error('OpenAI run failed:', {
+              runId: event.data.id,
+              threadId,
+              errorMessage,
+              errorType,
+              lastError: event.data.last_error,
+              fullEventData: event.data,
+            });
+
             // Mark run as failed in queue
             runQueue.markRunCompleted(runId, false, errorMessage);
 
-            send({
-              type: 'run.failed',
-              data: {
-                runId: event.data.id,
-                threadId,
-                status: 'failed',
-                error: errorMessage,
-                errorType,
-                retryable: errorType !== 'user_error',
-                elapsedTime: Date.now() - startTime,
-              },
-              timestamp,
-            });
+            // Track failure for later error throwing
+            runFailed = true;
+            failureMessage = errorMessage;
+
+            // DON'T send failure event to client - we'll fallback silently
+            // The fallback mechanism will handle providing a working response
+            console.log(
+              'OpenAI run failed, will trigger silent fallback to simulation'
+            );
+
             // Clean up run tracking
             cleanupRunFromQuery(event.data.id);
             break;
@@ -417,84 +477,15 @@ async function streamRealOpenAIRun(
     );
 
     console.log('Real OpenAI streaming completed:', result);
+
+    // If the run failed, throw an error to trigger fallback to simulation
+    if (runFailed) {
+      throw new Error(`OpenAI run failed: ${failureMessage}`);
+    }
+
     return { runId: result.runId || 'completed' };
   } catch (error) {
     console.error('Real OpenAI streaming failed:', error);
-
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-
-    // Special handling for concurrent run errors
-    if (errorMessage.includes('already has an active run')) {
-      console.log(
-        `Thread ${threadId} has an active run, attempting to cancel and retry`
-      );
-
-      // Extract run ID from error message (e.g., "run_V3LMgZYE9WOobsIaitmUgV59")
-      const runIdMatch = errorMessage.match(/run_[a-zA-Z0-9]+/);
-
-      if (runIdMatch) {
-        try {
-          const existingRunId = runIdMatch[0];
-          console.log(`Canceling existing run: ${existingRunId}`);
-
-          // Cancel the existing run
-          await assistantManager.cancelRun(threadId, existingRunId);
-
-          // Wait a brief moment for cancellation to take effect
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Retry the streaming run
-          console.log(`Retrying streaming run for thread: ${threadId}`);
-          const retryResult = await assistantManager.processStreamingRun(
-            threadId,
-            event => {
-              // Transform OpenAI events to our format (same logic as above)
-              const timestamp = Date.now();
-              // ... (same event handling logic would go here)
-              // For now, just log the retry
-              console.log('Retry streaming event:', event.event);
-            }
-          );
-
-          console.log('Retry streaming completed:', retryResult);
-          return { runId: retryResult.runId || 'retry_completed' };
-        } catch (cancelError) {
-          console.error('Failed to cancel existing run:', cancelError);
-        }
-      }
-
-      console.log(`Falling back to simulation mode for thread: ${threadId}`);
-      // Fall back to simulation if cancellation failed
-      try {
-        await simulateStreamingRun(threadId, sessionId, send);
-        return { runId: 'simulation_completed' };
-      } catch (simulationError) {
-        console.error('Simulation also failed:', simulationError);
-      }
-    }
-
-    // Send error event
-    const errorType = categorizeError(errorMessage);
-    send({
-      type: 'run.failed',
-      data: {
-        runId: runId || `error_${Date.now()}`,
-        threadId,
-        status: 'failed',
-        error: errorMessage,
-        errorType,
-        retryable: errorType !== 'user_error',
-        elapsedTime: Date.now() - startTime,
-      },
-      timestamp: Date.now(),
-    });
-
-    // Clean up if we have a runId
-    if (runId) {
-      cleanupRunFromQuery(runId);
-    }
-
     throw error;
   }
 }

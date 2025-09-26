@@ -1,64 +1,71 @@
 # Active Context
 
-## Project: AI Data Analyst Demo
+## Current Priority: OpenAI Streaming Issue Resolution
 
-**Status**: Advanced Development - Core Complete, Testing & Polish Phase  
-**Last Updated**: September 25, 2025  
-**Current Branch**: main
+### Problem Statement
 
-## Quick Overview
+- OpenAI API is working (verified with test scripts) but returning "Sorry, something went wrong" server_error during Assistant API streaming
+- Current fallback system shows error message to user before switching to simulation
+- User wants seamless experience without showing "Analysis failed" message
 
-Web application that provides automated CSV data analysis using OpenAI's Assistants API with Code Interpreter. Users upload CSV files, receive intelligent data profiling and analysis suggestions, and generate downloadable insights including charts, cleaned data, and summaries.
+### Solution Implemented ✅
 
-## Current State
+- **Silent Fallback**: Modified `thread.run.failed` handler to NOT send failure event to client
+- **Enhanced Diagnostics**: Created diagnostic tool to identify specific failure points
+- **Root Cause Investigation**: Integrated diagnostics into streaming pipeline
 
-- ✅ **Foundation Complete**: Next.js 14 + TypeScript + MUI setup
-- ✅ **Security**: Headers, rate limiting, CSP configuration
-- ✅ **Core Layout**: Responsive scaffold with system-only theme (removed manual toggle)
-- ✅ **Session Management**: In-memory store with TTL cleanup
-- ✅ **OpenAI Integration**: Assistant/thread creation, streaming runs
-- ✅ **File Upload**: CSV validation, PII detection, metadata storage
-- ✅ **Analysis Workflow**: Profile generation, suggestions, streaming UI
-- ✅ **Artifacts System**: Download system, versioning, bulk export
-- ✅ **Error Handling**: Comprehensive error taxonomy and resilience
-- ✅ **Queue Management**: Run cancellation, queue depth, rate limiting
-- ✅ **Observability**: Metrics dashboard, telemetry, performance tracking
-- ✅ **Testing Suite**: Comprehensive unit, integration, E2E, and accessibility tests
-- ✅ **Code Quality**: All TypeScript strict mode compliance, ESLint clean, Prettier formatted
-- 🔄 **Current Focus**: Final polish and demo preparation
+### Technical Details
 
-## Recent Achievements
+- OpenAI API key: Valid and working (chat completions and assistant creation successful)
+- Issue: `thread.run.failed` events with server_error code during streaming
+- **Fixed Behavior**: Silent fallback without showing error to user
+- **Diagnostic Tool**: `src/lib/openai-diagnostics.ts` for systematic issue identification
 
-- **Comprehensive Testing**: 30+ test files covering all critical paths
-- **TypeScript Strict Mode**: All compilation errors resolved across codebase
-- **Observability Dashboard**: Real-time metrics with system health monitoring
-- **Enhanced Error Handling**: Robust error taxonomy with retry logic
-- **Theme System Simplified**: Removed manual toggle, now uses system preference only
-- **Code Quality**: Full ESLint/Prettier compliance, no lint errors
+### Implementation Status
 
-## Technology Stack
+#### Completed ✅
 
-- **Frontend**: Next.js 14 (App Router), TypeScript 5.3+, MUI v5, React 18
-- **Backend**: Next.js API routes, OpenAI SDK v4.20+
-- **Storage**: In-memory (SessionStore, FileStore) with TTL cleanup
-- **External**: OpenAI Assistants API, Code Interpreter, Files API
-- **Testing**: Vitest, Testing Library, Jest-Axe, E2E automation
-- **Development**: ESLint, Prettier, Husky, TypeScript strict mode
+- EventSource connection stability fixes
+- ReactMarkdown with GitHub Flavored Markdown support
+- Stable useChat hook parameters preventing infinite re-renders
+- OpenAI API key validation and testing
+- **Silent fallback mechanism** (no user-facing errors)
+- Enhanced error logging for debugging
+- **Diagnostic framework** for OpenAI issue analysis
 
-## Key Implementation Notes
+#### Current Investigation 🔍
 
-- **File Constraints**: ≤50MB CSV files, PII detection via heuristics
-- **Performance Goals**: <15s analysis for ≤100k rows, 90s hard timeout
-- **Session TTL**: 24 hours with activity refresh
-- **Artifact Naming**: `analysisType_YYYYMMDD_HHMMSS_vN.ext`
-- **System Prompt**: Structured manifest output for artifact extraction
-- **Theme System**: System preference detection only (light/dark auto-detection)
-- **Error Taxonomy**: VALIDATION_ERROR, USER_ERROR, API_ERROR, TIMEOUT_ERROR, SYSTEM_ERROR, QUEUE_LIMIT_REACHED
+- Root cause analysis of OpenAI Assistant API failures
+- Thread/file state management issues
+- Code interpreter processing problems
+- Assistant configuration optimization
 
-## Demo Readiness
+### Diagnostic Framework
 
-Project is nearing demo-ready state with all core functionality implemented and tested. Remaining work focuses on final polish and sample data preparation.
+- `diagnoseOpenAIIssue()` - Systematic testing of OpenAI components
+- Tests: Assistant creation, thread access, message creation, file handling, run execution
+- Integrated into streaming pipeline for automatic root cause analysis
+
+### Technical Architecture
+
+- Next.js 14 with Server-Sent Events
+- OpenAI Assistant API with code interpreter
+- ReactMarkdown for message rendering
+- Material-UI integration
+- File upload and CSV analysis pipeline
+- **Silent fallback to simulation** when OpenAI fails
 
 ## Next Steps
 
-See `tasks.md` for detailed implementation plan. Focus on sample data creation and final UX polish for demo presentation.
+1. **Monitor diagnostic results** to identify specific failure patterns
+2. **Investigate thread state** and file upload correlation with failures
+3. **Optimize assistant configuration** based on diagnostic findings
+4. **Consider alternative approaches** (direct chat completions vs assistant API)
+
+## Key Files
+
+- `src/app/api/runs/[threadId]/stream/route.ts` - Silent fallback implementation
+- `src/lib/openai-diagnostics.ts` - Diagnostic framework
+- `src/lib/openai.ts` - OpenAI integration
+- `src/hooks/useChat.ts` - Client-side EventSource management
+- `src/components/ui/ChatPane.tsx` - Message rendering
