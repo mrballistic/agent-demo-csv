@@ -678,9 +678,9 @@ async function handleStructuredAnalysisOutput(
     let imageContent = '';
 
     if (analysisData.files && Array.isArray(analysisData.files)) {
-      // Import chart generator
-      const { generatePlaceholderChart } = await import(
-        '@/lib/chart-generator'
+      // Import dynamic chart generator
+      const { generateDynamicChart } = await import(
+        '@/lib/dynamic-chart-generator'
       );
 
       for (const file of analysisData.files) {
@@ -688,10 +688,10 @@ async function handleStructuredAnalysisOutput(
           try {
             // Generate chart content based on file type
             if (file.type === 'image' && file.purpose === 'chart') {
-              console.log(`Generating placeholder chart for: ${file.path}`);
+              console.log(`Generating dynamic chart for: ${file.path}`);
 
-              // Generate SVG chart
-              const chartBuffer = await generatePlaceholderChart(
+              // Generate PNG chart using real data from AI analysis
+              const chartBuffer = await generateDynamicChart(
                 analysisData,
                 sessionId
               );
@@ -702,7 +702,7 @@ async function handleStructuredAnalysisOutput(
                   sessionId,
                   'chart',
                   chartBuffer,
-                  'svg'
+                  'png'
                 );
 
                 // Update session with this artifact

@@ -28,6 +28,33 @@ const ANALYSIS_RESPONSE_SCHEMA = {
         required: ['path', 'type', 'purpose'],
       },
     },
+    chart_data: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        chart_type: {
+          type: 'string',
+          enum: ['bar', 'line', 'pie', 'scatter', 'histogram'],
+        },
+        title: { type: 'string' },
+        x_label: { type: 'string' },
+        y_label: { type: 'string' },
+        data_points: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              label: { type: 'string' },
+              value: { type: 'number' },
+              color: { type: 'string' },
+            },
+            required: ['label', 'value'],
+          },
+        },
+      },
+      required: ['chart_type', 'title', 'data_points'],
+    },
     metadata: {
       type: 'object',
       additionalProperties: false,
@@ -48,7 +75,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
       required: ['analysis_type', 'columns_used', 'pii_columns'],
     },
   },
-  required: ['insight', 'files', 'metadata'],
+  required: ['insight', 'files', 'metadata', 'chart_data'],
 } as const;
 
 // Types for our structured output
@@ -59,6 +86,17 @@ export interface AnalysisResponse {
     type: 'image' | 'file';
     purpose: 'chart' | 'data' | 'visualization';
   }>;
+  chart_data: {
+    chart_type: 'bar' | 'line' | 'pie' | 'scatter' | 'histogram';
+    title: string;
+    x_label?: string;
+    y_label?: string;
+    data_points: Array<{
+      label: string;
+      value: number;
+      color?: string;
+    }>;
+  };
   metadata: {
     analysis_type: 'trend' | 'top-sku' | 'profile' | 'channel-mix' | 'custom';
     columns_used: string[];
@@ -71,11 +109,10 @@ const SYSTEM_PROMPT = `You are "Analyst-in-a-Box", a careful data analyst.
 
 Contract:
 1) When a CSV is provided with a SPECIFIC analysis request:
-   - Perform the requested analysis immediately
+   - Perform the requested analysis immediately using the actual CSV data
    - Provide a 2-3 line plain-English INSIGHT
-   - Create a matplotlib PNG chart saved as /tmp/plot.png (readable axes, title, units)
-   - If you transform data, save /tmp/cleaned.csv
-   - Return structured output with insight, files, and metadata
+   - Extract the TOP DATA POINTS from your analysis (5-10 items max)
+   - Return structured output with insight, files, chart_data, and metadata
 
 2) When a CSV is provided with a GENERAL request (like "profile" or "analyze"):
    - First PROFILE the dataset: rows, columns, dtypes, missing %, 5 sample rows (markdown table)
@@ -90,16 +127,29 @@ Contract:
    - "channel", "sales channel", "channel performance" → Channel Analysis
    - "profile", "overview", "summary" → Data Profiling only
 
-4) Always provide structured output with your analysis results.
+4) CHART DATA REQUIREMENTS:
+   - Always include chart_data with REAL data from your analysis
+   - chart_type: Choose "bar" (comparisons), "line" (trends), "pie" (proportions), "scatter" (relationships)
+   - title: Descriptive chart title
+   - x_label/y_label: Axis labels if applicable
+   - data_points: ACTUAL values from the CSV (max 10 points, use top/most significant)
+   - For trends: Use actual time periods and values
+   - For top products: Use actual product names (or IDs if PII) and values
+   - For channels: Use actual channel names and performance metrics
+
+5) Always provide structured output with insight, files, chart_data, and metadata.
+   - For files, specify: {"path": "/tmp/plot.png", "type": "image", "purpose": "chart"}
+   - The system will generate visual charts using your chart_data
 
 PII PROTECTION RULES (CRITICAL):
 - NEVER display raw PII values (names, emails, phone numbers, addresses, SSNs, etc.)
 - In sample data tables: Replace PII with placeholders like "[EMAIL]", "[PHONE]", "[NAME]", "[ADDRESS]"
-- In charts/visualizations: Use aggregated data only (counts, percentages, segments)
+- In chart data: Use aggregated data, customer IDs, or segments instead of personal info
 - In analysis: Reference customers by ID or segment, never by name or contact info
-- Examples of safe vs unsafe outputs:
-  ✅ SAFE: "Customer CUST-012345", "john****@example.com", "555-***-1234", "[REDACTED NAME]"
-  ❌ UNSAFE: "John Smith", "john.smith@gmail.com", "555-123-4567", "123 Main St"
+- Chart labels: Use "Customer-001", "Segment A", "Q1-2024" instead of personal identifiers
+- Examples of safe vs unsafe chart data:
+  ✅ SAFE: {"label": "CUST-012345", "value": 850}, {"label": "Premium Segment", "value": 65}
+  ❌ UNSAFE: {"label": "John Smith", "value": 850}, {"label": "john@email.com", "value": 65}
 
 Rules:
 - If the request exceeds MVP scope (multi-segmentation), pick the first segment and state the limitation.
