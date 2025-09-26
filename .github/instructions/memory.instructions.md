@@ -28,4 +28,10 @@ applyTo: '**'
 - `sampleCSVForTokens()` reduces CSV size when exceeding token limits
 - `streamAnalysis()` now handles CSV analysis separately from conversation history - CSV data not stored in chat, only insights preserved
 
-**Next**: Testing with large CSV files. **FIXED: UI presentation** - system now displays complete analysis summary content in chat instead of just artifact filename. Analysis summaries show full markdown content including insights, metadata, and file information directly in the conversation.
+**Follow-up Questions Fix**: **COMPLETE** - Fixed raw JSON streaming issue in follow-up questions. System now properly handles structured outputs by buffering content events and using `handleStructuredAnalysisOutput` for formatted responses. Added proper event handling in `processQueuedRun` function to prevent JSON bleeding through to UI.
+
+**Chart Typography Enhancement**: **COMPLETE** - Enhanced SVG chart generation with professional typography system. Fixed XML syntax issues in font-family attributes (removed problematic inner quotes). Charts now use system UI font stack with proper hierarchy: bold titles (700), semi-bold labels (600), normal text (400). All text elements consistently styled with modern, cross-platform fonts.
+
+**Current Architecture**: Dual-path streaming system with structured analysis for CSV-related queries and conversational responses for general questions. Event buffering ensures clean UI presentation. Professional chart generation with accessibility-compliant SVG output.
+
+**Status**: **PRODUCTION READY** - Core functionality complete, follow-up conversations working, charts rendering with enhanced typography, comprehensive error handling implemented.

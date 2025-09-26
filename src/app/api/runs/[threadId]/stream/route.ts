@@ -369,6 +369,7 @@ async function processQueuedRun(
     const messageId = `msg_${Date.now()}`;
     let accumulatedContent = '';
     let hasStructuredOutput = false; // Track if we've processed structured output
+    const bufferedEvents: Array<{ delta: string; content: string }> = []; // Buffer content events
 
     for await (const event of analysisStream) {
       console.log(`Stream event received: ${event.type}`);
@@ -376,20 +377,11 @@ async function processQueuedRun(
       if (event.type === 'content') {
         accumulatedContent += event.data.delta;
 
-        // Only send raw content if we haven't processed structured output yet
-        if (!hasStructuredOutput) {
-          // Send message delta for streaming response
-          send({
-            type: 'message.delta',
-            data: {
-              messageId,
-              content: accumulatedContent,
-              role: 'assistant',
-              delta: event.data.delta,
-            },
-            timestamp: Date.now(),
-          });
-        }
+        // Buffer the content instead of sending immediately
+        bufferedEvents.push({
+          delta: event.data.delta,
+          content: accumulatedContent,
+        });
       } else if (event.type === 'structured_output') {
         // Handle structured analysis output for follow-up questions
         hasStructuredOutput = true;
@@ -398,6 +390,9 @@ async function processQueuedRun(
           'Follow-up question returned structured analysis, processing...'
         );
 
+        // Clear buffered events since we're using structured output instead
+        bufferedEvents.length = 0;
+
         // Create artifacts and send formatted summary like initial analysis
         await handleStructuredAnalysisOutput(
           analysisData,
@@ -405,6 +400,22 @@ async function processQueuedRun(
           send
         );
       } else if (event.type === 'done') {
+        // Send buffered content if we didn't process structured output
+        if (!hasStructuredOutput && bufferedEvents.length > 0) {
+          // Send all buffered content as delta events
+          for (const bufferedEvent of bufferedEvents) {
+            send({
+              type: 'message.delta',
+              data: {
+                messageId,
+                content: bufferedEvent.content,
+                role: 'assistant',
+                delta: bufferedEvent.delta,
+              },
+              timestamp: Date.now(),
+            });
+          }
+        }
         // Only send final message if we haven't processed structured output
         if (!hasStructuredOutput) {
           // Send final message

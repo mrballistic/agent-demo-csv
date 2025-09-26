@@ -4,6 +4,19 @@
 import { storageManager } from './storage-manager';
 import { AnalysisResponse } from './openai-responses';
 
+// Typography configuration
+const CHART_TYPOGRAPHY = {
+  fontFamily:
+    'system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif',
+  titleSize: '18px',
+  labelSize: '12px',
+  tickSize: '11px',
+  legendSize: '12px',
+  fontWeightNormal: '400',
+  fontWeightSemiBold: '600',
+  fontWeightBold: '700',
+};
+
 /**
  * Generate a simple SVG chart from structured data
  */
@@ -56,12 +69,14 @@ export async function generateSimpleSVGChart(
               fill="${color}" stroke="#ffffff" stroke-width="2" rx="4"/>
         <!-- Value label -->
         <text x="${x + barWidth / 2}" y="${y - 10}" 
-              text-anchor="middle" fill="#374151" font-size="12" font-weight="bold">
+              text-anchor="middle" fill="#374151" font-family="${CHART_TYPOGRAPHY.fontFamily}" 
+              font-size="${CHART_TYPOGRAPHY.labelSize}" font-weight="${CHART_TYPOGRAPHY.fontWeightSemiBold}">
           ${point.value.toLocaleString()}
         </text>
         <!-- X-axis label -->
         <text x="${x + barWidth / 2}" y="${margin.top + chartHeight + 20}" 
-              text-anchor="middle" fill="#6b7280" font-size="11" 
+              text-anchor="middle" fill="#6b7280" font-family="${CHART_TYPOGRAPHY.fontFamily}" 
+              font-size="${CHART_TYPOGRAPHY.tickSize}" font-weight="${CHART_TYPOGRAPHY.fontWeightNormal}"
               transform="rotate(-45, ${x + barWidth / 2}, ${margin.top + chartHeight + 20})">
           ${point.label}
         </text>
@@ -93,12 +108,15 @@ export async function generateSimpleSVGChart(
           <!-- Data point -->
           <circle cx="${x}" cy="${y}" r="6" fill="${colors[0]}" stroke="#ffffff" stroke-width="3"/>
           <!-- Value label -->
-          <text x="${x}" y="${y - 15}" text-anchor="middle" fill="#374151" font-size="12" font-weight="bold">
+          <text x="${x}" y="${y - 15}" text-anchor="middle" fill="#374151" 
+                font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.labelSize}" 
+                font-weight="${CHART_TYPOGRAPHY.fontWeightSemiBold}">
             ${point.value.toLocaleString()}
           </text>
           <!-- X-axis label -->
           <text x="${x}" y="${margin.top + chartHeight + 20}" 
-                text-anchor="middle" fill="#6b7280" font-size="11"
+                text-anchor="middle" fill="#6b7280" font-family="${CHART_TYPOGRAPHY.fontFamily}" 
+                font-size="${CHART_TYPOGRAPHY.tickSize}" font-weight="${CHART_TYPOGRAPHY.fontWeightNormal}"
                 transform="rotate(-45, ${x}, ${margin.top + chartHeight + 20})">
             ${point.label}
           </text>
@@ -145,7 +163,8 @@ export async function generateSimpleSVGChart(
         <path d="${pathData}" fill="${color}" stroke="#ffffff" stroke-width="2"/>
         <!-- Label -->
         <text x="${labelX}" y="${labelY}" text-anchor="middle" fill="white" 
-              font-size="12" font-weight="bold">
+              font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.labelSize}" 
+              font-weight="${CHART_TYPOGRAPHY.fontWeightSemiBold}">
           ${(percentage * 100).toFixed(1)}%
         </text>
       `;
@@ -163,7 +182,8 @@ export async function generateSimpleSVGChart(
 
         return `
         <rect x="20" y="${y}" width="15" height="15" fill="${color}"/>
-        <text x="40" y="${y + 12}" fill="#374151" font-size="12">
+        <text x="40" y="${y + 12}" fill="#374151" font-family="${CHART_TYPOGRAPHY.fontFamily}" 
+              font-size="${CHART_TYPOGRAPHY.legendSize}" font-weight="${CHART_TYPOGRAPHY.fontWeightNormal}">
           ${point.label}: ${point.value.toLocaleString()}
         </text>
       `;
@@ -186,7 +206,9 @@ export async function generateSimpleSVGChart(
         <line x1="${margin.left - 10}" y1="${y}" x2="${margin.left}" y2="${y}" 
               stroke="#d1d5db" stroke-width="1"/>
         <!-- Y-axis label -->
-        <text x="${margin.left - 15}" y="${y + 4}" text-anchor="end" fill="#6b7280" font-size="11">
+        <text x="${margin.left - 15}" y="${y + 4}" text-anchor="end" fill="#6b7280" 
+              font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.tickSize}" 
+              font-weight="${CHART_TYPOGRAPHY.fontWeightNormal}">
           ${Math.round(value).toLocaleString()}
         </text>
         <!-- Grid line -->
@@ -203,7 +225,9 @@ export async function generateSimpleSVGChart(
   <rect width="100%" height="100%" fill="white"/>
   
   <!-- Chart Title -->
-  <text x="${width / 2}" y="30" text-anchor="middle" fill="#1f2937" font-size="18" font-weight="bold">
+  <text x="${width / 2}" y="35" text-anchor="middle" fill="#1f2937" 
+        font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.titleSize}" 
+        font-weight="${CHART_TYPOGRAPHY.fontWeightBold}">
     ${chart_data.title}
   </text>
   
@@ -220,13 +244,17 @@ export async function generateSimpleSVGChart(
         stroke="#374151" stroke-width="2"/>
         
   <!-- Y-axis label -->
-  <text x="25" y="${margin.top + chartHeight / 2}" text-anchor="middle" fill="#374151" font-size="12" font-weight="bold"
+  <text x="25" y="${margin.top + chartHeight / 2}" text-anchor="middle" fill="#374151" 
+        font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.labelSize}" 
+        font-weight="${CHART_TYPOGRAPHY.fontWeightSemiBold}"
         transform="rotate(-90, 25, ${margin.top + chartHeight / 2})">
     ${chart_data.y_label}
   </text>
   
   <!-- X-axis label -->
-  <text x="${margin.left + chartWidth / 2}" y="${height - 15}" text-anchor="middle" fill="#374151" font-size="12" font-weight="bold">
+  <text x="${margin.left + chartWidth / 2}" y="${height - 15}" text-anchor="middle" fill="#374151" 
+        font-family="${CHART_TYPOGRAPHY.fontFamily}" font-size="${CHART_TYPOGRAPHY.labelSize}" 
+        font-weight="${CHART_TYPOGRAPHY.fontWeightSemiBold}">
     ${chart_data.x_label}
   </text>
   
