@@ -391,6 +391,7 @@ export class FileStore {
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
       gif: 'image/gif',
+      svg: 'image/svg+xml',
       csv: 'text/csv',
       txt: 'text/plain',
       md: 'text/markdown',

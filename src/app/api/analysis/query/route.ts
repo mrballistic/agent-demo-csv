@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { assistantManager } from '@/lib/openai';
+import { conversationManager } from '@/lib/openai-responses';
 import { sessionStore } from '@/lib/session-store';
 import { runQueue, QueuedRun } from '@/lib/run-queue';
 import {
@@ -266,17 +266,10 @@ export async function POST(request: NextRequest) {
 // Handle run timeout
 async function handleRunTimeout(runId: string, threadId: string) {
   try {
-    // Try to cancel the run if it's a real OpenAI run
-    const hasOpenAIKey =
-      process.env.OPENAI_API_KEY &&
-      process.env.OPENAI_API_KEY !== 'your-openai-api-key-here';
-
-    if (hasOpenAIKey && !runId.startsWith('run_')) {
-      await assistantManager.cancelRun(threadId, runId);
-    }
-
+    // For the new conversation manager, we don't need to cancel runs
+    // as they're handled through streaming endpoints with natural timeouts
     console.log(`Run ${runId} timed out`);
   } catch (error) {
-    console.error('Failed to cancel timed out run:', error);
+    console.error('Failed to handle timed out run:', error);
   }
 }

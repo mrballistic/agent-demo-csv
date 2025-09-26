@@ -48,10 +48,14 @@ export async function GET(
     const headers = new Headers();
     headers.set('Content-Type', metadata.mimeType);
     headers.set('Content-Length', metadata.size.toString());
+
+    // For images, use inline disposition to allow display in browser
+    const isImage = metadata.mimeType.startsWith('image/');
     headers.set(
       'Content-Disposition',
-      `attachment; filename="${metadata.originalName}"`
+      `${isImage ? 'inline' : 'attachment'}; filename="${metadata.originalName}"`
     );
+
     headers.set('Cache-Control', 'private, max-age=3600'); // Cache for 1 hour
     headers.set('ETag', `"${metadata.checksum}"`);
 

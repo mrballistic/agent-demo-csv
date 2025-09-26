@@ -10,6 +10,9 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   Assessment,
@@ -18,6 +21,8 @@ import {
   Analytics,
   People,
   Refresh,
+  ExpandMore,
+  FlashOn,
 } from '@mui/icons-material';
 import {
   KeyboardNavigation,
@@ -73,6 +78,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     SuggestionsResponse['metadata'] | null
   >(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [expanded, setExpanded] = useState<string | false>(
+    fileId ? 'quick-actions' : false
+  );
   const stackRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -80,11 +88,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     if (!fileId) {
       setSuggestions([]);
       setMetadata(null);
+      setExpanded(false);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setExpanded('quick-actions'); // Auto-expand when file is uploaded
 
     try {
       const response = await fetch(
@@ -113,6 +123,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   useEffect(() => {
     fetchSuggestions();
   }, [fileId, fetchSuggestions]);
+
+  const handleAccordionChange = useCallback(
+    (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
+      setExpanded(isExpanded ? panel : false);
+    },
+    []
+  );
 
   // Set up keyboard navigation for action buttons
   useEffect(() => {
@@ -153,181 +170,190 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   if (!fileId) {
     return (
-      <Box
-        className={className}
-        role="region"
-        aria-labelledby="quick-actions-heading"
-      >
-        <Typography variant="h6" gutterBottom id="quick-actions-heading">
-          Quick Actions
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Upload a CSV file to see analysis suggestions
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Box
-        className={className}
-        role="region"
-        aria-labelledby="quick-actions-heading"
-      >
-        <Typography variant="h6" gutterBottom id="quick-actions-heading">
-          Quick Actions
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
-          <CircularProgress size={20} aria-hidden="true" />
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            role="status"
-            aria-live="polite"
-          >
-            Loading suggestions...
-          </Typography>
-        </Box>
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box
-        className={className}
-        role="region"
-        aria-labelledby="quick-actions-heading"
-      >
-        <Typography variant="h6" gutterBottom id="quick-actions-heading">
-          Quick Actions
-        </Typography>
-        <Alert
-          severity="error"
-          sx={{ mb: 2 }}
-          role="alert"
-          action={
-            <Button
-              size="small"
-              onClick={fetchSuggestions}
-              startIcon={<Refresh />}
-              aria-label="Retry loading suggestions"
-            >
-              Retry
-            </Button>
-          }
+      <Accordion disabled sx={{ mb: 1, opacity: 0.6 }}>
+        <AccordionSummary
+          expandIcon={<ExpandMore />}
+          aria-controls="quick-actions-content"
+          id="quick-actions-header"
         >
-          {error}
-        </Alert>
-      </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FlashOn color="disabled" />
+            <Typography variant="subtitle2" color="text.disabled">
+              Quick Actions
+            </Typography>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant="body2" color="text.secondary">
+            Upload a CSV file to see analysis suggestions
+          </Typography>
+        </AccordionDetails>
+      </Accordion>
     );
   }
 
   return (
-    <Box
-      className={className}
-      role="region"
-      aria-labelledby="quick-actions-heading"
+    <Accordion
+      expanded={expanded === 'quick-actions'}
+      onChange={handleAccordionChange('quick-actions')}
+      sx={{ mb: 1 }}
     >
-      <Typography variant="h6" gutterBottom id="quick-actions-heading">
-        Quick Actions
-      </Typography>
-
-      {metadata && (
-        <Box sx={{ mb: 2 }}>
-          <Chip
-            label={`${metadata.columnCount} columns detected`}
-            size="small"
-            variant="outlined"
-            color="info"
-            aria-label={`Data contains ${metadata.columnCount} columns`}
-          />
-        </Box>
-      )}
-
-      <Stack
-        spacing={1}
-        ref={stackRef}
-        role="group"
-        aria-label="Analysis actions"
+      <AccordionSummary
+        expandIcon={<ExpandMore />}
+        aria-controls="quick-actions-content"
+        id="quick-actions-header"
       >
-        {suggestions.map((suggestion, index) => {
-          const isDisabled = !suggestion.enabled || disabled;
-
-          const button = (
-            <Button
-              key={suggestion.id}
-              variant="outlined"
-              startIcon={getActionIcon(suggestion.id)}
-              onClick={() => handleActionClick(suggestion)}
-              disabled={isDisabled}
-              fullWidth
-              sx={{
-                justifyContent: 'flex-start',
-                textAlign: 'left',
-                opacity: isDisabled ? 0.5 : 1,
-                '&.Mui-disabled': {
-                  borderColor: 'action.disabled',
-                  color: 'text.disabled',
-                },
-              }}
-              aria-describedby={`action-${suggestion.id}-description`}
-              tabIndex={index === focusedIndex && !isDisabled ? 0 : -1}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FlashOn color="primary" />
+          <Typography variant="subtitle2">
+            Quick Actions
+            {!loading && suggestions.length > 0 && (
+              <Chip
+                label={`${suggestions.filter(s => s.enabled).length} available`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ ml: 1 }}
+              />
+            )}
+          </Typography>
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails>
+        {loading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
+            <CircularProgress size={20} aria-hidden="true" />
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              role="status"
+              aria-live="polite"
             >
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="button" display="block">
-                  {suggestion.label}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  display="block"
-                  sx={{ textTransform: 'none', lineHeight: 1.2 }}
-                  id={`action-${suggestion.id}-description`}
-                >
-                  {suggestion.description}
-                </Typography>
-              </Box>
-            </Button>
-          );
-
-          // Wrap disabled buttons with tooltip explaining why they're disabled
-          if (isDisabled && suggestion.reason) {
-            return (
-              <Tooltip
-                key={suggestion.id}
-                title={
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      Cannot run this analysis
-                    </Typography>
-                    <Typography variant="body2">{suggestion.reason}</Typography>
-                    {suggestion.requiredColumns.length > 0 && (
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        Required: {suggestion.requiredColumns.join(', ')}
-                      </Typography>
-                    )}
-                  </Box>
-                }
-                placement="right"
-                arrow
+              Loading suggestions...
+            </Typography>
+          </Box>
+        ) : error ? (
+          <Alert
+            severity="error"
+            sx={{ mb: 2 }}
+            role="alert"
+            action={
+              <Button
+                size="small"
+                onClick={fetchSuggestions}
+                startIcon={<Refresh />}
+                aria-label="Retry loading suggestions"
               >
-                <span>{button}</span>
-              </Tooltip>
-            );
-          }
+                Retry
+              </Button>
+            }
+          >
+            {error}
+          </Alert>
+        ) : (
+          <>
+            {metadata && (
+              <Box sx={{ mb: 2 }}>
+                <Chip
+                  label={`${metadata.columnCount} columns detected`}
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  aria-label={`Data contains ${metadata.columnCount} columns`}
+                />
+              </Box>
+            )}
 
-          return button;
-        })}
-      </Stack>
+            <Stack
+              spacing={1}
+              ref={stackRef}
+              role="group"
+              aria-label="Analysis actions"
+            >
+              {suggestions.map((suggestion, index) => {
+                const isDisabled = !suggestion.enabled || disabled;
 
-      {suggestions.length === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          No analysis suggestions available for this file.
-        </Typography>
-      )}
-    </Box>
+                const button = (
+                  <Button
+                    key={suggestion.id}
+                    variant="outlined"
+                    startIcon={getActionIcon(suggestion.id)}
+                    onClick={() => handleActionClick(suggestion)}
+                    disabled={isDisabled}
+                    fullWidth
+                    sx={{
+                      justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      opacity: isDisabled ? 0.5 : 1,
+                      '&.Mui-disabled': {
+                        borderColor: 'action.disabled',
+                        color: 'text.disabled',
+                      },
+                    }}
+                    aria-describedby={`action-${suggestion.id}-description`}
+                    tabIndex={index === focusedIndex && !isDisabled ? 0 : -1}
+                  >
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="button" display="block">
+                        {suggestion.label}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                        sx={{ textTransform: 'none', lineHeight: 1.2 }}
+                        id={`action-${suggestion.id}-description`}
+                      >
+                        {suggestion.description}
+                      </Typography>
+                    </Box>
+                  </Button>
+                );
+
+                // Wrap disabled buttons with tooltip explaining why they're disabled
+                if (isDisabled && suggestion.reason) {
+                  return (
+                    <Tooltip
+                      key={suggestion.id}
+                      title={
+                        <Box>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 'bold' }}
+                          >
+                            Cannot run this analysis
+                          </Typography>
+                          <Typography variant="body2">
+                            {suggestion.reason}
+                          </Typography>
+                          {suggestion.requiredColumns.length > 0 && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              Required: {suggestion.requiredColumns.join(', ')}
+                            </Typography>
+                          )}
+                        </Box>
+                      }
+                      placement="right"
+                      arrow
+                    >
+                      <span>{button}</span>
+                    </Tooltip>
+                  );
+                }
+
+                return button;
+              })}
+            </Stack>
+
+            {suggestions.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                No analysis suggestions available for this file.
+              </Typography>
+            )}
+          </>
+        )}
+      </AccordionDetails>
+    </Accordion>
   );
 };
 

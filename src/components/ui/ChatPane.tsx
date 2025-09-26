@@ -16,6 +16,7 @@ import {
   Alert,
   Fade,
   Skeleton,
+  Link,
 } from '@mui/material';
 import {
   Person,
@@ -27,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { ChatMessage } from '@/types';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
+import ImageLightbox from './ImageLightbox';
 
 interface StreamingMessage extends ChatMessage {
   isStreaming?: boolean;
@@ -79,6 +81,12 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   const [currentWaitTime, setCurrentWaitTime] = useState<number | undefined>(
     estimatedWaitTime
   );
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{
+    src: string;
+    alt: string;
+    title?: string;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -244,6 +252,36 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages]);
+
+  // Handle lightbox
+  const openLightbox = useCallback(
+    (src: string, alt: string, title?: string) => {
+      setLightboxImage({ src, alt, title: title || alt });
+      setLightboxOpen(true);
+    },
+    []
+  );
+
+  const closeLightbox = useCallback(() => {
+    setLightboxOpen(false);
+    setLightboxImage(null);
+  }, []);
+
+  // Handle keyboard events for lightbox
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && lightboxOpen) {
+        closeLightbox();
+      }
+    };
+
+    if (lightboxOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+
+    return undefined;
+  }, [lightboxOpen, closeLightbox]);
 
   const getMessageIcon = (role: ChatMessage['role']) => {
     switch (role) {
@@ -485,6 +523,30 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                             {children}
                           </Typography>
                         ),
+                        // Override links to use theme colors
+                        a: ({ href, children }) => (
+                          <Link
+                            href={href}
+                            target={
+                              href?.startsWith('http') ? '_blank' : undefined
+                            }
+                            rel={
+                              href?.startsWith('http')
+                                ? 'noopener noreferrer'
+                                : undefined
+                            }
+                            sx={{
+                              color: 'primary.main',
+                              textDecoration: 'none',
+                              '&:hover': {
+                                textDecoration: 'underline',
+                                color: 'primary.dark',
+                              },
+                            }}
+                          >
+                            {children}
+                          </Link>
+                        ),
                         // Override code to ensure proper styling
                         code: ({ children, className }) => {
                           const isInline = !className?.includes('language-');
@@ -513,6 +575,72 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                               }}
                             >
                               {children}
+                            </Box>
+                          );
+                        },
+                        // Override images for lightbox functionality
+                        img: ({ src, alt }) => {
+                          const isArtifactImage =
+                            src?.includes('/api/artifacts/');
+                          const imageTitle = alt?.includes('Chart')
+                            ? 'Generated Chart'
+                            : alt;
+
+                          return (
+                            <Box
+                              sx={{
+                                my: 2,
+                                textAlign: 'center',
+                              }}
+                            >
+                              <Box
+                                component="img"
+                                src={src}
+                                alt={alt}
+                                onClick={
+                                  isArtifactImage
+                                    ? () => openLightbox(src!, alt!, imageTitle)
+                                    : undefined
+                                }
+                                sx={{
+                                  maxWidth: '100%',
+                                  height: 'auto',
+                                  borderRadius: 1,
+                                  boxShadow: 2,
+                                  display: 'block',
+                                  mx: 'auto',
+                                  cursor: isArtifactImage
+                                    ? 'pointer'
+                                    : 'default',
+                                  transition:
+                                    'transform 0.2s ease, box-shadow 0.2s ease',
+                                  '&:hover': isArtifactImage
+                                    ? {
+                                        transform: 'scale(1.02)',
+                                        boxShadow: 3,
+                                      }
+                                    : {},
+                                }}
+                                loading="lazy"
+                                title={
+                                  isArtifactImage
+                                    ? 'Click to view full size'
+                                    : undefined
+                                }
+                              />
+                              {isArtifactImage && (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{
+                                    mt: 1,
+                                    display: 'block',
+                                    fontStyle: 'italic',
+                                  }}
+                                >
+                                  Click image to view full size
+                                </Typography>
+                              )}
                             </Box>
                           );
                         },
@@ -677,6 +805,17 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           </Typography>
         </Box>
       </Box>
+
+      {/* Lightbox for images */}
+      {lightboxImage && (
+        <ImageLightbox
+          open={lightboxOpen}
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          {...(lightboxImage.title ? { title: lightboxImage.title } : {})}
+          onClose={closeLightbox}
+        />
+      )}
     </Paper>
   );
 };

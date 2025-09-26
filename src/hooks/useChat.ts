@@ -103,9 +103,24 @@ export function useChat({
   const handleMessageCompleted = useCallback((data: any) => {
     const { messageId, content } = data;
 
-    setMessages(prev =>
-      prev.map(msg => (msg.id === messageId ? { ...msg, content } : msg))
-    );
+    setMessages(prev => {
+      const existingIndex = prev.findIndex(msg => msg.id === messageId);
+      if (existingIndex >= 0) {
+        // Update existing message
+        return prev.map(msg =>
+          msg.id === messageId ? { ...msg, content } : msg
+        );
+      } else {
+        // Create new message if it doesn't exist
+        const newMessage: ChatMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: content,
+          timestamp: new Date(),
+        };
+        return [...prev, newMessage];
+      }
+    });
   }, []);
 
   // Handle run failures
@@ -242,6 +257,11 @@ export function useChat({
             setConnectionError(null);
             break;
 
+          case 'connection.heartbeat':
+            // Keep-alive signal, just update timestamp but don't change state
+            console.log('[useChat] Received heartbeat, connection alive');
+            break;
+
           case 'run.started':
             setIsRunning(true);
             setRunStatus('queued');
@@ -329,11 +349,26 @@ export function useChat({
           case 'message.completed':
             {
               const { messageId, content } = streamEvent.data;
-              setMessages(prev =>
-                prev.map(msg =>
-                  msg.id === messageId ? { ...msg, content } : msg
-                )
-              );
+              setMessages(prev => {
+                const existingIndex = prev.findIndex(
+                  msg => msg.id === messageId
+                );
+                if (existingIndex >= 0) {
+                  // Update existing message
+                  return prev.map(msg =>
+                    msg.id === messageId ? { ...msg, content } : msg
+                  );
+                } else {
+                  // Create new message if it doesn't exist
+                  const newMessage: ChatMessage = {
+                    id: messageId,
+                    role: 'assistant',
+                    content: content,
+                    timestamp: new Date(),
+                  };
+                  return [...prev, newMessage];
+                }
+              });
             }
             break;
 
@@ -343,6 +378,12 @@ export function useChat({
             currentRunIdRef.current = null;
             onRunStatusChangeRef.current?.('completed');
             onQueueUpdateRef.current?.(undefined, undefined); // Clear queue info
+
+            // Keep connection alive for follow-up questions
+            // Don't close the stream after completion
+            console.log(
+              '[useChat] Run completed, connection remains open for follow-ups'
+            );
             break;
 
           case 'run.failed':
@@ -439,7 +480,9 @@ export function useChat({
 
           case 'artifact.created':
             onArtifactCreatedRef.current?.(streamEvent.data);
-            {
+
+            // Only create a message if suppressMessage is not true
+            if (!streamEvent.data.suppressMessage) {
               messageCounterRef.current += 1;
               const artifactMessage: ChatMessage = {
                 id: `artifact_${Date.now()}_${messageCounterRef.current}`,
@@ -463,7 +506,7 @@ export function useChat({
                 if (isDuplicate) {
                   console.log(
                     '[useChat] Preventing duplicate message:',
-                    artifactMessage.id
+                    artifactMessage.content
                   );
                   return prev;
                 }
@@ -502,10 +545,13 @@ export function useChat({
 
       // If readyState is CLOSED, this is likely normal completion, not an error
       if (eventSource?.readyState === EventSource.CLOSED) {
-        console.log('[useChat] Stream completed successfully');
+        console.log(
+          '[useChat] Stream closed normally, enabling auto-reconnect for follow-ups'
+        );
         setConnectionError(null); // Clear any previous errors
-        // Allow reconnection for future analyses - this is normal completion
+        // Enable immediate reconnection for follow-ups
         shouldReconnectRef.current = true;
+        lastConnectionTimeRef.current = 0; // Reset debounce to allow immediate reconnection
       } else if (eventSource?.readyState === EventSource.CONNECTING) {
         // Connection failed while trying to connect
         console.log('[useChat] Connection failed during initial connection');
@@ -550,6 +596,21 @@ export function useChat({
     async (content: string, fileId?: string | null) => {
       if (!threadId) {
         throw new Error('No thread ID available');
+      }
+
+      // If not connected and reconnection is allowed, trigger a reconnection
+      if (
+        !isConnected &&
+        shouldReconnectRef.current &&
+        !isConnectingRef.current
+      ) {
+        console.log('[useChat] Triggering reconnection before sending message');
+        lastConnectionTimeRef.current = 0; // Reset debounce
+        shouldReconnectRef.current = true;
+
+        // Force a reconnection by updating a dependency that triggers the useEffect
+        // This is a bit of a hack, but it works with the current architecture
+        setConnectionError(null);
       }
 
       // Add optimistic user message
@@ -639,7 +700,7 @@ export function useChat({
         });
       }
     },
-    [threadId]
+    [threadId, isConnected]
   );
 
   // Cancel current run

@@ -16,6 +16,9 @@ import {
   Card,
   CardContent,
   Grid,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   CloudUpload,
@@ -28,6 +31,7 @@ import {
   TrendingUp,
   ExpandMore,
   ExpandLess,
+  Upload,
 } from '@mui/icons-material';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
@@ -73,7 +77,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   });
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [expanded, setExpanded] = useState<string | false>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetUploadState = useCallback(() => {
@@ -85,6 +89,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     });
     setSelectedFile(null);
   }, []);
+
+  const handleAccordionChange = useCallback(
+    (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
+      setExpanded(isExpanded ? panel : false);
+    },
+    []
+  );
 
   const validateFile = useCallback((file: File): string | null => {
     // Check file type
@@ -174,7 +185,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
         // Collapse uploader after a short delay (but keep success state)
         setTimeout(() => {
-          setIsExpanded(false);
+          setExpanded(false);
         }, 2000);
       } catch (error) {
         const errorMessage =
@@ -271,10 +282,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     document.body.removeChild(link);
   }, []);
 
-  const handleToggleExpanded = useCallback(() => {
-    setIsExpanded(prev => !prev);
-  }, []);
-
   const isDisabled = disabled || uploadState.isUploading;
 
   const sampleDatasets = [
@@ -309,35 +316,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   ];
 
   return (
-    <Box>
-      {/* Title section with disclosure arrow */}
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="h6" component="h2" sx={{ color: 'text.primary' }}>
-          Upload Data
-        </Typography>
-        {uploadState.success && (
-          <Button
-            variant="text"
-            size="small"
-            onClick={handleToggleExpanded}
-            sx={{
-              minWidth: 'auto',
-              p: 0.5,
-              color: 'text.secondary',
-              '&:hover': {
-                color: 'primary.main',
-                bgcolor: 'transparent',
-              },
-            }}
-            aria-label={isExpanded ? 'Hide upload area' : 'Show upload area'}
-          >
-            {isExpanded ? <ExpandLess /> : <ExpandMore />}
-          </Button>
-        )}
-      </Box>
-
-      {/* Upload widget - show if expanded or if no successful upload yet */}
-      {(isExpanded || !uploadState.success) && (
+    <Accordion
+      expanded={expanded === 'upload'}
+      onChange={handleAccordionChange('upload')}
+      sx={{ mb: 1 }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMore />}
+        aria-controls="upload-content"
+        id="upload-header"
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Upload color={uploadState.success ? 'success' : 'primary'} />
+          <Typography variant="subtitle2">
+            Upload Data
+            {uploadState.success && (
+              <Chip
+                label="Complete"
+                size="small"
+                color="success"
+                variant="outlined"
+                sx={{ ml: 1 }}
+              />
+            )}
+          </Typography>
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails>
+        {/* Upload widget */}
         <Paper
           {...(className && { className })}
           sx={{
@@ -471,128 +477,136 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               )}
           </Stack>
         </Paper>
-      )}
 
-      {/* Sample Data Section */}
-      {showSampleData && (isExpanded || !uploadState.success) && (
-        <Box sx={{ mt: 3 }}>
-          <Divider sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Or try our sample data
-            </Typography>
-          </Divider>
+        {/* Sample Data Section */}
+        {showSampleData && (
+          <Box sx={{ mt: 3 }}>
+            <Divider sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Or try our sample data
+              </Typography>
+            </Divider>
 
-          <Grid container spacing={2}>
-            {sampleDatasets.map(dataset => (
-              <Grid item xs={12} md={4} key={dataset.filename}>
-                <Card
-                  variant="outlined"
-                  sx={{
-                    height: '100%',
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      boxShadow: 2,
-                      borderColor: 'primary.main',
-                    },
-                  }}
-                >
-                  <CardContent sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      {dataset.icon}
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ ml: 1, fontWeight: 'medium' }}
+            <Grid container spacing={2}>
+              {sampleDatasets.map(dataset => (
+                <Grid item xs={12} md={4} key={dataset.filename}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      height: '100%',
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        boxShadow: 2,
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 2 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          mb: 1,
+                        }}
                       >
-                        {dataset.name}
+                        {dataset.icon}
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ ml: 1, fontWeight: 'medium' }}
+                        >
+                          {dataset.name}
+                        </Typography>
+                      </Box>
+
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 1 }}
+                      >
+                        {dataset.description}
                       </Typography>
-                    </Box>
 
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      {dataset.description}
-                    </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.disabled"
+                        sx={{ mb: 1, display: 'block' }}
+                      >
+                        {dataset.rows} rows • CSV format
+                      </Typography>
 
-                    <Typography
-                      variant="caption"
-                      color="text.disabled"
-                      sx={{ mb: 1, display: 'block' }}
-                    >
-                      {dataset.rows} rows • CSV format
-                    </Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 0.5,
+                          mb: 1,
+                        }}
+                      >
+                        {dataset.features.slice(0, 2).map(feature => (
+                          <Chip
+                            key={feature}
+                            label={feature}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem', height: 20 }}
+                          />
+                        ))}
+                        {dataset.features.length > 2 && (
+                          <Chip
+                            label={`+${dataset.features.length - 2} more`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem', height: 20 }}
+                          />
+                        )}
+                      </Box>
 
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 0.5,
-                        mb: 1,
-                      }}
-                    >
-                      {dataset.features.slice(0, 2).map(feature => (
-                        <Chip
-                          key={feature}
-                          label={feature}
-                          size="small"
-                          variant="outlined"
-                          sx={{ fontSize: '0.7rem', height: 20 }}
-                        />
-                      ))}
-                      {dataset.features.length > 2 && (
-                        <Chip
-                          label={`+${dataset.features.length - 2} more`}
-                          size="small"
-                          variant="outlined"
-                          sx={{ fontSize: '0.7rem', height: 20 }}
-                        />
-                      )}
-                    </Box>
+                      <Button
+                        size="small"
+                        startIcon={<Download />}
+                        fullWidth
+                        variant="outlined"
+                        sx={{ mt: 'auto' }}
+                        onClick={() =>
+                          handleSampleDataDownload(dataset.filename)
+                        }
+                        aria-label={`Download ${dataset.name} sample data`}
+                      >
+                        Download Sample
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
 
-                    <Button
-                      size="small"
-                      startIcon={<Download />}
-                      fullWidth
-                      variant="outlined"
-                      sx={{ mt: 'auto' }}
-                      onClick={() => handleSampleDataDownload(dataset.filename)}
-                      aria-label={`Download ${dataset.name} sample data`}
-                    >
-                      Download Sample
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="caption" color="text.disabled">
-              Download a sample file, then upload it to see the AI data analyst
-              in action
-            </Typography>
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="caption" color="text.disabled">
+                Download a sample file, then upload it to see the AI data
+                analyst in action
+              </Typography>
+            </Box>
           </Box>
-        </Box>
-      )}
+        )}
 
-      {/* Error Toast */}
-      <Snackbar
-        open={!!uploadState.error}
-        autoHideDuration={6000}
-        onClose={handleCloseError}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert
+        {/* Error Toast */}
+        <Snackbar
+          open={!!uploadState.error}
+          autoHideDuration={6000}
           onClose={handleCloseError}
-          severity="error"
-          variant="filled"
-          sx={{ width: '100%' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          {uploadState.error}
-        </Alert>
-      </Snackbar>
-    </Box>
+          <Alert
+            onClose={handleCloseError}
+            severity="error"
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {uploadState.error}
+          </Alert>
+        </Snackbar>
+      </AccordionDetails>
+    </Accordion>
   );
 };
 
