@@ -461,7 +461,7 @@ export class ConversationManager {
       });
 
       const stream = await this.client.chat.completions.create({
-        model: 'gpt-5',
+        model: 'gpt-4o-2024-08-06',
         messages: analysisMessages,
         max_completion_tokens: 2000,
         stream: true,
@@ -509,6 +509,25 @@ export class ConversationManager {
 
       // Parse the final structured response
       try {
+        // Check if we have any content to parse
+        if (!accumulatedContent || accumulatedContent.trim() === '') {
+          console.error('No content received from OpenAI. This may indicate:');
+          console.error('- OpenAI API request failed or timed out');
+          console.error('- Model parameters are incompatible');
+          console.error('- OpenAI API is experiencing issues');
+
+          yield {
+            type: 'error',
+            data: {
+              error:
+                'Empty response from OpenAI. API request may have failed or timed out.',
+              content: accumulatedContent,
+              suggestion: 'Please try your request again.',
+            },
+          };
+          return;
+        }
+
         const structuredResponse: AnalysisResponse =
           JSON.parse(accumulatedContent);
 
@@ -601,7 +620,7 @@ export class ConversationManager {
 
       // Create streaming chat completion without structured output
       const stream = await this.client.chat.completions.create({
-        model: 'gpt-5',
+        model: 'gpt-4o-2024-08-06',
         messages: messages.map(msg => ({
           role: msg.role,
           content: msg.content,
@@ -663,7 +682,7 @@ export class ConversationManager {
 
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-5',
+        model: 'gpt-4o-2024-08-06',
         messages: messages.map(msg => ({
           role: msg.role,
           content: msg.content,
