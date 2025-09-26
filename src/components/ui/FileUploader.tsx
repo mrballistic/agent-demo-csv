@@ -19,6 +19,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  CircularProgress,
 } from '@mui/material';
 import {
   CloudUpload,
@@ -32,6 +33,7 @@ import {
   ExpandMore,
   ExpandLess,
   Upload,
+  PlayArrow,
 } from '@mui/icons-material';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
@@ -273,16 +275,114 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setUploadState(prev => ({ ...prev, error: null }));
   }, []);
 
-  const handleSampleDataDownload = useCallback((filename: string) => {
-    const link = document.createElement('a');
-    link.href = `/sample-data/${filename}`;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, []);
-
   const isDisabled = disabled || uploadState.isUploading;
+
+  const handleSampleDataClick = useCallback(
+    async (filename: string, datasetName: string) => {
+      if (isDisabled) return;
+
+      try {
+        // Fetch the sample CSV file
+        const response = await fetch(`/sample-data/${filename}`);
+        if (!response.ok) {
+          throw new Error('Failed to load sample data');
+        }
+
+        const csvContent = await response.text();
+
+        // Create a File object from the CSV content
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const file = new File([blob], filename, { type: 'text/csv' });
+
+        // Validate the file (same as regular upload)
+        const validationError = validateFile(file);
+        if (validationError) {
+          setUploadState({
+            isUploading: false,
+            progress: 0,
+            error: validationError,
+            success: false,
+          });
+          return;
+        }
+
+        // Update upload state to show progress
+        setUploadState({
+          isUploading: true,
+          progress: 0,
+          error: null,
+          success: false,
+        });
+
+        // Simulate progress for demo effect
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress = Math.min(progress + Math.random() * 30, 85);
+          setUploadState(prev => ({ ...prev, progress }));
+        }, 100);
+
+        // Create form data and upload
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadResponse = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        clearInterval(progressInterval);
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(errorData.error || 'Upload failed');
+        }
+
+        const result: FileUploadResult = await uploadResponse.json();
+
+        setUploadState({
+          isUploading: false,
+          progress: 100,
+          error: null,
+          success: true,
+        });
+
+        // Post system message
+        const sizeKB = Math.round(file.size / 1024);
+        const systemMessage = `Sample data loaded: ${datasetName} (${sizeKB}KB, ${result.rowCount} rows, ${result.profileHints.columnCount} columns)`;
+        onSystemMessage(systemMessage);
+
+        // Announce success to screen readers
+        announceToScreenReader(
+          `Sample data loaded successfully: ${datasetName}`,
+          'polite'
+        );
+
+        // Call success callback
+        onFileUploaded(result);
+
+        // Collapse uploader after a short delay (but keep success state)
+        setTimeout(() => {
+          setExpanded(false);
+        }, 1500);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to load sample data';
+        setUploadState({
+          isUploading: false,
+          progress: 0,
+          error: errorMessage,
+          success: false,
+        });
+
+        // Announce error to screen readers
+        announceToScreenReader(
+          `Error loading sample data: ${errorMessage}`,
+          'assertive'
+        );
+      }
+    },
+    [isDisabled, validateFile, onFileUploaded, onSystemMessage, setExpanded]
+  );
 
   const sampleDatasets = [
     {
@@ -483,97 +583,129 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           <Box sx={{ mt: 3 }}>
             <Divider sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Or try our sample data
+                Try sample data instantly
               </Typography>
             </Divider>
 
             <Grid container spacing={2}>
               {sampleDatasets.map(dataset => (
-                <Grid item xs={12} md={4} key={dataset.filename}>
+                <Grid item xs={12} key={dataset.filename}>
                   <Card
                     variant="outlined"
                     sx={{
-                      height: '100%',
                       transition: 'all 0.2s ease-in-out',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isDisabled ? 0.6 : 1,
                       '&:hover': {
-                        boxShadow: 2,
-                        borderColor: 'primary.main',
+                        boxShadow: isDisabled ? 'none' : 2,
+                        borderColor: isDisabled ? 'divider' : 'primary.main',
+                        bgcolor: isDisabled ? 'transparent' : 'action.hover',
                       },
                     }}
+                    onClick={() =>
+                      !isDisabled &&
+                      handleSampleDataClick(dataset.filename, dataset.name)
+                    }
                   >
                     <CardContent sx={{ p: 2 }}>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          mb: 1,
-                        }}
-                      >
-                        {dataset.icon}
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ ml: 1, fontWeight: 'medium' }}
+                      <Box sx={{ position: 'relative' }}>
+                        {/* Feature chips in top-right */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 0.5,
+                            justifyContent: 'flex-end',
+                          }}
                         >
-                          {dataset.name}
-                        </Typography>
-                      </Box>
+                          {dataset.features.slice(0, 2).map(feature => (
+                            <Chip
+                              key={feature}
+                              label={feature}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: 20 }}
+                            />
+                          ))}
+                          {dataset.features.length > 2 && (
+                            <Chip
+                              label={`+${dataset.features.length - 2} more`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: 20 }}
+                            />
+                          )}
+                        </Box>
 
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 1 }}
-                      >
-                        {dataset.description}
-                      </Typography>
+                        {/* Main content area */}
+                        <Box sx={{ pr: 12 }}>
+                          {/* Header with icon and title */}
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              mb: 1,
+                            }}
+                          >
+                            <Box sx={{ mr: 2 }}>{dataset.icon}</Box>
+                            <Typography
+                              variant="subtitle2"
+                              sx={{ fontWeight: 'medium' }}
+                            >
+                              {dataset.name}
+                            </Typography>
+                          </Box>
 
-                      <Typography
-                        variant="caption"
-                        color="text.disabled"
-                        sx={{ mb: 1, display: 'block' }}
-                      >
-                        {dataset.rows} rows • CSV format
-                      </Typography>
+                          {/* Description text */}
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mb: 1, lineHeight: 1.4 }}
+                          >
+                            {dataset.description}
+                          </Typography>
 
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 0.5,
-                          mb: 1,
-                        }}
-                      >
-                        {dataset.features.slice(0, 2).map(feature => (
-                          <Chip
-                            key={feature}
-                            label={feature}
+                          {/* Metadata */}
+                          <Typography
+                            variant="caption"
+                            color="text.disabled"
+                            sx={{ mb: 2, display: 'block' }}
+                          >
+                            {dataset.rows} rows • CSV format
+                          </Typography>
+
+                          {/* Try Demo button in bottom-left */}
+                          <Button
                             size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem', height: 20 }}
-                          />
-                        ))}
-                        {dataset.features.length > 2 && (
-                          <Chip
-                            label={`+${dataset.features.length - 2} more`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem', height: 20 }}
-                          />
-                        )}
+                            startIcon={
+                              uploadState.isUploading ? (
+                                <CircularProgress size={16} />
+                              ) : (
+                                <PlayArrow />
+                              )
+                            }
+                            variant="contained"
+                            disabled={isDisabled}
+                            onClick={e => {
+                              e.stopPropagation();
+                              !isDisabled &&
+                                handleSampleDataClick(
+                                  dataset.filename,
+                                  dataset.name
+                                );
+                            }}
+                            aria-label={`Try ${dataset.name} sample data`}
+                            sx={{ minWidth: 100 }}
+                          >
+                            {uploadState.isUploading
+                              ? 'Loading...'
+                              : 'Try Demo'}
+                          </Button>
+                        </Box>
                       </Box>
-
-                      <Button
-                        size="small"
-                        startIcon={<Download />}
-                        fullWidth
-                        variant="outlined"
-                        sx={{ mt: 'auto' }}
-                        onClick={() =>
-                          handleSampleDataDownload(dataset.filename)
-                        }
-                        aria-label={`Download ${dataset.name} sample data`}
-                      >
-                        Download Sample
-                      </Button>
                     </CardContent>
                   </Card>
                 </Grid>
@@ -582,8 +714,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="caption" color="text.disabled">
-                Download a sample file, then upload it to see the AI data
-                analyst in action
+                Click any sample dataset above to try it instantly, or upload
+                your own CSV file.
               </Typography>
             </Box>
           </Box>
