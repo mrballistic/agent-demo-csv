@@ -187,11 +187,23 @@ export async function GET(
 
         // Check for running runs for this thread (the queue processor moves them from queued to running)
         const queuedRun = runQueue.getCurrentRun(threadId);
+
+        // Add more detailed debugging to understand the queue state
+        const queueStats = runQueue.getStats();
+        console.log(`[Stream ${threadId}] Queue stats:`, {
+          total: queueStats.total,
+          queued: queueStats.queued,
+          running: queueStats.running,
+          completed: queueStats.completed,
+        });
+
         console.log(`[Stream ${threadId}] Checking for queued runs:`, {
           hasRun: !!queuedRun,
           runId: queuedRun?.id,
           status: queuedRun?.status,
           startedAt: !!queuedRun?.startedAt,
+          threadId: queuedRun?.threadId,
+          searchingForThreadId: threadId,
         });
 
         if (

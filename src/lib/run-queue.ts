@@ -40,6 +40,7 @@ export class RunQueue {
   private readonly maxConcurrent: number;
   private readonly maxQueueDepth: number;
   private readonly maxRetries: number;
+  private readonly instanceId: string;
 
   constructor(
     maxConcurrent: number = 3,
@@ -49,6 +50,9 @@ export class RunQueue {
     this.maxConcurrent = maxConcurrent;
     this.maxQueueDepth = maxQueueDepth;
     this.maxRetries = maxRetries;
+    this.instanceId = `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    console.log(`[RunQueue] Created new instance: ${this.instanceId}`);
 
     // Start the queue processor
     this.startProcessor();
@@ -274,6 +278,10 @@ export class RunQueue {
           );
         });
       }
+    } else {
+      console.log(
+        `[RunQueue] markRunCompleted called for ${runId} but run not found in running map`
+      );
     }
   }
 
@@ -423,9 +431,17 @@ export class RunQueue {
   private cleanup(): void {
     const cutoff = Date.now() - 60 * 60 * 1000; // 1 hour ago
 
+    const beforeLength = this.completed.length;
     this.completed = this.completed.filter(
       run => (run.completedAt || run.queuedAt) > cutoff
     );
+    const afterLength = this.completed.length;
+
+    if (beforeLength !== afterLength) {
+      console.log(
+        `[RunQueue] Cleanup removed ${beforeLength - afterLength} old completed runs`
+      );
+    }
   }
 
   /**
@@ -436,9 +452,16 @@ export class RunQueue {
   }
 }
 
-// Create singleton instance
-export const runQueue = new RunQueue(
-  parseInt(process.env.MAX_CONCURRENT_RUNS || '3'),
-  parseInt(process.env.MAX_QUEUE_DEPTH || '20'),
-  parseInt(process.env.MAX_RETRIES || '2')
-);
+// Create singleton instance with global reference to survive hot reloads
+declare global {
+  // eslint-disable-next-line no-var
+  var __runQueue: RunQueue | undefined;
+}
+
+export const runQueue =
+  globalThis.__runQueue ??
+  (globalThis.__runQueue = new RunQueue(
+    parseInt(process.env.MAX_CONCURRENT_RUNS || '3'),
+    parseInt(process.env.MAX_QUEUE_DEPTH || '20'),
+    parseInt(process.env.MAX_RETRIES || '2')
+  ));

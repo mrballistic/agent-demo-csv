@@ -467,17 +467,21 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                     sx={{
                       '& p': { mb: 1 },
                       '& pre': {
-                        bgcolor: 'grey.100',
+                        bgcolor: 'action.hover',
                         p: 1,
                         borderRadius: 1,
                         overflow: 'auto',
+                        border: '1px solid',
+                        borderColor: 'divider',
                       },
                       '& code': {
-                        bgcolor: 'grey.100',
+                        bgcolor: 'action.hover',
                         p: 0.5,
                         borderRadius: 0.5,
                         fontSize: '0.875em',
                         fontFamily: 'monospace',
+                        border: '1px solid',
+                        borderColor: 'divider',
                       },
                       '& blockquote': {
                         borderLeft: '4px solid',
@@ -501,7 +505,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                         textAlign: 'left',
                       },
                       '& th': {
-                        bgcolor: 'grey.50',
+                        bgcolor: 'action.hover',
                         fontWeight: 'bold',
                       },
                     }}
@@ -523,30 +527,38 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                             {children}
                           </Typography>
                         ),
-                        // Override links to use theme colors
-                        a: ({ href, children }) => (
-                          <Link
-                            href={href}
-                            target={
-                              href?.startsWith('http') ? '_blank' : undefined
-                            }
-                            rel={
-                              href?.startsWith('http')
-                                ? 'noopener noreferrer'
-                                : undefined
-                            }
-                            sx={{
-                              color: 'primary.main',
-                              textDecoration: 'none',
-                              '&:hover': {
-                                textDecoration: 'underline',
-                                color: 'primary.dark',
-                              },
-                            }}
-                          >
-                            {children}
-                          </Link>
-                        ),
+                        // Override links to use theme colors and open in new tab
+                        a: ({ href, children }) => {
+                          // Determine if this is an external link
+                          const isExternal =
+                            href &&
+                            (href.startsWith('http://') ||
+                              href.startsWith('https://') ||
+                              href.startsWith('//') ||
+                              (!href.startsWith('/') &&
+                                !href.startsWith('#') &&
+                                href.includes('.')));
+
+                          return (
+                            <Link
+                              href={href}
+                              target={isExternal ? '_blank' : undefined}
+                              rel={
+                                isExternal ? 'noopener noreferrer' : undefined
+                              }
+                              sx={{
+                                color: 'primary.main',
+                                textDecoration: 'none',
+                                '&:hover': {
+                                  textDecoration: 'underline',
+                                  color: 'primary.dark',
+                                },
+                              }}
+                            >
+                              {children}
+                            </Link>
+                          );
+                        },
                         // Override code to ensure proper styling
                         code: ({ children, className }) => {
                           const isInline = !className?.includes('language-');
@@ -558,19 +570,23 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                                 fontSize: '0.875em',
                                 ...(isInline
                                   ? {
-                                      bgcolor: 'grey.100',
+                                      bgcolor: 'action.hover',
                                       px: 0.5,
                                       py: 0.25,
                                       borderRadius: 0.5,
                                       display: 'inline',
+                                      border: '1px solid',
+                                      borderColor: 'divider',
                                     }
                                   : {
-                                      bgcolor: 'grey.100',
+                                      bgcolor: 'action.hover',
                                       p: 1,
                                       borderRadius: 1,
                                       overflow: 'auto',
                                       display: 'block',
                                       whiteSpace: 'pre',
+                                      border: '1px solid',
+                                      borderColor: 'divider',
                                     }),
                               }}
                             >
