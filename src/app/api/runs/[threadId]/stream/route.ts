@@ -362,7 +362,8 @@ async function processQueuedRun(
     console.log('Using conversation manager for follow-up question');
     const analysisStream = conversationManager.streamConversation(
       queuedRun.sessionId,
-      queuedRun.query
+      queuedRun.query,
+      queuedRun.fileId
     );
 
     const messageId = `msg_${Date.now()}`;

@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { fileStore } from './file-store';
 
 // Initialize OpenAI client
 export const openai = new OpenAI({
@@ -463,7 +464,8 @@ export class ConversationManager {
    */
   async *streamConversation(
     sessionId: string,
-    userMessage: string
+    userMessage: string,
+    fileId?: string
   ): AsyncGenerator<{
     type: 'content' | 'error' | 'done';
     data: any;
@@ -474,8 +476,24 @@ export class ConversationManager {
         this.initializeConversation(sessionId);
       }
 
-      // Add user message to conversation
-      this.addUserMessage(sessionId, userMessage);
+      // Get CSV content if fileId is provided
+      let csvContent: string | undefined;
+      if (fileId) {
+        try {
+          const fileBuffer = await fileStore.getFile(fileId);
+          if (fileBuffer) {
+            csvContent = fileBuffer.toString('utf-8');
+          }
+        } catch (error) {
+          console.warn(
+            `Could not load CSV content for fileId ${fileId}:`,
+            error
+          );
+        }
+      }
+
+      // Add user message to conversation with CSV content
+      this.addUserMessage(sessionId, userMessage, csvContent);
 
       // Get conversation history
       const messages = this.getConversation(sessionId);
