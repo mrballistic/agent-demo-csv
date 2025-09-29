@@ -105,11 +105,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       return 'Please upload a CSV file. Other formats are not supported.';
     }
 
-    // Check file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024; // 50MB
+    // Check file size (4MB limit for Vercel compatibility)
+    const maxSize = 4 * 1024 * 1024; // 4MB
     if (file.size > maxSize) {
       const sizeMB = Math.round(file.size / 1024 / 1024);
-      return `File size (${sizeMB}MB) exceeds the 50MB limit. Please upload a smaller file.`;
+      return `File size (${sizeMB}MB) exceeds the 4MB limit for serverless deployment. Please upload a smaller file or use the sample data.`;
     }
 
     // Check if file is empty
@@ -387,11 +387,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const sampleDatasets = [
     {
       name: 'Comprehensive Sales Data',
-      filename: 'ai-analyst-demo_orders_small.csv',
+      filename: 'ai-analyst-demo_orders_medium.csv',
       description:
         'Rich sales dataset with customer details, channels, and product categories',
       icon: <DataObject color="primary" />,
-      rows: 34626,
+      rows: 20000,
       features: [
         'Deep revenue analysis',
         'Customer segmentation',

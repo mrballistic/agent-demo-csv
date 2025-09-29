@@ -34,4 +34,6 @@ applyTo: '**'
 
 **Current Architecture**: Dual-path streaming system with structured analysis for CSV-related queries and conversational responses for general questions. Event buffering ensures clean UI presentation. Professional chart generation with accessibility-compliant SVG output.
 
-**Status**: **PRODUCTION READY** - Core functionality complete, follow-up conversations working, charts rendering with enhanced typography, comprehensive error handling implemented.
+**Vercel Deployment Fix**: **COMPLETE** - Resolved 413 Request Entity Too Large error by reducing file size limits from 50MB to 4MB and creating optimized sample data (ai-analyst-demo_orders_medium.csv, 3.9MB, 20K rows) that fits within Vercel's 4.5MB serverless function payload limit. Removed oversized files to prevent deployment issues.
+
+**Status**: **PRODUCTION READY** - Core functionality complete, follow-up conversations working, charts rendering with enhanced typography, comprehensive error handling implemented, Vercel deployment compatible.
