@@ -1,12 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '../../app/api/analysis/profile/route';
-import { AgentType } from '../../lib/agents/types';
+import { AgentType } from '../agents/types';
+
+// Mock telemetry service
+vi.mock('../../lib/telemetry', () => ({
+  telemetryService: {
+    logError: vi.fn(),
+  },
+  Telemetry: {
+    trackSessionEvent: vi.fn(),
+    trackAnalysisRequest: vi.fn(),
+    trackAnalysisCompletion: vi.fn(),
+  },
+}));
 
 // Mock the dependencies
 vi.mock('../../lib/session-store', () => ({
   sessionStore: {
     getSession: vi.fn(),
+    createSession: vi.fn(),
     updateSession: vi.fn(),
   },
 }));
@@ -27,12 +40,42 @@ vi.mock('../../lib/agents', () => ({
   DataProfilingAgent: vi.fn().mockImplementation(() => ({
     type: AgentType.PROFILING,
   })),
+  createExecutionContext: vi.fn(),
+  AgentType: {
+    PROFILING: 'profiling',
+  },
+}));
+
+// Mock error handler
+vi.mock('../../lib/error-handler', () => ({
+  AppError: vi
+    .fn()
+    .mockImplementation((type: string, message: string, options: any) => ({
+      type,
+      message,
+      options,
+      toErrorResponse: () => ({ success: false, error: message }),
+    })),
+  ErrorFactory: {
+    sessionNotFound: () => ({
+      toErrorResponse: () => ({ success: false, error: 'Session not found' }),
+    }),
+  },
+  ErrorType: {
+    VALIDATION_ERROR: 'validation_error',
+  },
+  defaultRetryHandler: {
+    executeWithRetry: vi.fn(),
+  },
+  classifyError: vi.fn(),
+  createErrorTelemetry: vi.fn(),
 }));
 
 // Get the mocked instances
 const { sessionStore } = await import('../../lib/session-store');
 const { fileStore } = await import('../../lib/file-store');
 const { globalOrchestrator } = await import('../../lib/agents');
+const { defaultRetryHandler } = await import('../../lib/error-handler');
 
 describe('Profile API Integration', () => {
   const mockSession = {
@@ -52,45 +95,127 @@ describe('Profile API Integration', () => {
 
   const mockFileContent = Buffer.from('name,age,city\nJohn,25,NYC\nJane,30,LA');
   const mockFileMetadata = {
+    id: 'test-file-id',
+    sessionId: 'test-session',
+    filename: 'test.csv',
     originalName: 'test.csv',
     size: mockFileContent.length,
-    mimeType: 'text/csv',
     checksum: 'test-checksum',
+    mimeType: 'text/csv',
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 86400000,
+    filePath: '/tmp/test.csv',
   };
 
   const mockProfile = {
-    summary: {
+    id: 'profile-123',
+    version: 1,
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 86400000),
+    metadata: {
+      filename: 'test.csv',
+      size: mockFileContent.length,
+      encoding: 'utf-8',
+      delimiter: ',',
       rowCount: 2,
       columnCount: 3,
-      totalSize: mockFileContent.length,
-      completeness: 1.0,
-      quality: 'good',
+      processingTime: 100,
+      checksum: 'test-checksum',
     },
-    columns: [
-      {
-        name: 'name',
-        type: 'text',
-        uniqueCount: 2,
-        nullCount: 0,
-        quality: { score: 1.0, issues: [] },
+    schema: {
+      columns: [
+        {
+          name: 'name',
+          type: 'text' as const,
+          nullable: true,
+          unique: false,
+          statistics: {
+            avgLength: 5,
+            minLength: 4,
+            maxLength: 6,
+            commonWords: [
+              { word: 'john', count: 1 },
+              { word: 'jane', count: 1 },
+            ],
+            encoding: 'utf-8',
+            languages: ['en'],
+            patterns: [],
+          },
+          nullCount: 0,
+          nullPercentage: 0,
+          uniqueCount: 2,
+          duplicateCount: 0,
+          sampleValues: ['John', 'Jane'],
+          qualityFlags: [],
+        },
+        {
+          name: 'age',
+          type: 'numeric' as const,
+          nullable: true,
+          unique: false,
+          statistics: {
+            min: 25,
+            max: 30,
+            mean: 27.5,
+            median: 27.5,
+            mode: [],
+            stddev: 2.5,
+            variance: 6.25,
+            percentiles: { p25: 25, p50: 27.5, p75: 30, p90: 30, p95: 30 },
+            histogram: [],
+            outliers: [],
+          },
+          nullCount: 0,
+          nullPercentage: 0,
+          uniqueCount: 2,
+          duplicateCount: 0,
+          sampleValues: [25, 30],
+          qualityFlags: [],
+        },
+      ],
+
+      foreignKeys: [],
+      relationships: [],
+    },
+    quality: {
+      overall: 95,
+      dimensions: {
+        completeness: 100,
+        consistency: 90,
+        accuracy: 95,
+        uniqueness: 100,
+        validity: 95,
       },
-      {
-        name: 'age',
-        type: 'integer',
-        uniqueCount: 2,
-        nullCount: 0,
-        quality: { score: 1.0, issues: [] },
-        statistics: { min: 25, max: 30, mean: 27.5 },
-      },
-      {
-        name: 'city',
-        type: 'text',
-        uniqueCount: 2,
-        nullCount: 0,
-        quality: { score: 1.0, issues: [] },
-      },
+      issues: [],
+    },
+    security: {
+      piiColumns: [],
+      riskLevel: 'low' as const,
+      recommendations: [],
+      complianceFlags: [],
+      hasRedaction: false,
+    },
+    insights: {
+      keyFindings: [],
+      trends: [],
+      anomalies: [],
+      recommendations: [],
+      suggestedQueries: [],
+    },
+    sampleData: [
+      { name: 'John', age: 25, city: 'NYC' },
+      { name: 'Jane', age: 30, city: 'LA' },
     ],
-    insights: [],
+    aggregations: {
+      numeric: {},
+      categorical: {},
+      temporal: {},
+    },
+    indexes: {
+      secondaryIndexes: [],
+      compositeIndexes: [],
+      fullText: [],
+    },
   };
 
   beforeEach(() => {
@@ -98,13 +223,17 @@ describe('Profile API Integration', () => {
 
     // Setup default mocks
     vi.mocked(sessionStore.getSession).mockReturnValue(mockSession);
-    vi.mocked(sessionStore.updateSession).mockResolvedValue(undefined);
+    vi.mocked(sessionStore.createSession).mockReturnValue(mockSession);
+    vi.mocked(sessionStore.updateSession).mockReturnValue(true);
     vi.mocked(fileStore.getFile).mockResolvedValue(mockFileContent);
     vi.mocked(fileStore.getFileMetadata).mockReturnValue(mockFileMetadata);
-    vi.mocked(globalOrchestrator.getAgent).mockReturnValue(null);
+    vi.mocked(globalOrchestrator.getAgent).mockReturnValue(undefined);
     vi.mocked(globalOrchestrator.registerAgent).mockResolvedValue(undefined);
     vi.mocked(globalOrchestrator.processDataUpload).mockResolvedValue(
       mockProfile
+    );
+    vi.mocked(defaultRetryHandler.executeWithRetry).mockImplementation(
+      async (fn: () => any) => await fn()
     );
   });
 
@@ -126,9 +255,10 @@ describe('Profile API Integration', () => {
     const result = await response.json();
 
     expect(response.status).toBe(200);
-    expect(result.success).toBe(true);
-    expect(result.data.status).toBe('completed');
-    expect(result.data.profile).toEqual(mockProfile);
+    expect(result.status).toBe('completed');
+    expect(result.profile).toEqual(mockProfile);
+    expect(result.sessionId).toBe('test-session');
+    expect(result.threadId).toBe('test-thread');
 
     // Verify agent orchestrator was called correctly
     expect(globalOrchestrator.getAgent).toHaveBeenCalledWith(
@@ -155,7 +285,7 @@ describe('Profile API Integration', () => {
   });
 
   it('should handle missing file error', async () => {
-    fileStore.getFile.mockResolvedValue(null);
+    vi.mocked(fileStore.getFile).mockResolvedValue(null);
 
     const request = new NextRequest(
       'http://localhost:3000/api/analysis/profile',
@@ -197,8 +327,18 @@ describe('Profile API Integration', () => {
   });
 
   it('should reuse existing profiling agent if already registered', async () => {
-    const mockExistingAgent = { type: AgentType.PROFILING };
-    globalOrchestrator.getAgent.mockReturnValue(mockExistingAgent);
+    const mockExistingAgent = {
+      type: AgentType.PROFILING,
+      name: 'DataProfilingAgent',
+      version: '1.0.0',
+      execute: vi.fn(),
+      validateInput: vi.fn(),
+      getHealth: vi.fn(),
+      destroy: vi.fn(),
+    };
+    vi.mocked(globalOrchestrator.getAgent).mockReturnValue(
+      mockExistingAgent as any
+    );
 
     const request = new NextRequest(
       'http://localhost:3000/api/analysis/profile',
@@ -213,7 +353,7 @@ describe('Profile API Integration', () => {
     const result = await response.json();
 
     expect(response.status).toBe(200);
-    expect(result.success).toBe(true);
+    expect(result.status).toBe('completed');
 
     // Should not register a new agent
     expect(globalOrchestrator.registerAgent).not.toHaveBeenCalled();

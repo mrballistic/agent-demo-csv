@@ -85,38 +85,9 @@ export class IntentClassifier {
    */
   private initializePatterns(): void {
     this.patterns = [
-      {
-        pattern:
-          /^(what|tell me|show me|describe).*(data|dataset|file|csv)|overview|summary|profile/,
-        type: QueryType.PROFILE,
-        confidence: 0.9,
-        entityExtractors: {},
-        examples: [
-          'What is in this data?',
-          'Show me an overview',
-          'Describe the dataset',
-        ],
-      },
-      {
-        pattern: /(trend|over time|time series|growth|decline|change.*time)/,
-        type: QueryType.TREND,
-        confidence: 0.85,
-        entityExtractors: {
-          timeColumns: [/\b(date|time|month|year|day)\w*\b/g],
-          measures: [/\b(sales|revenue|price|amount|count|total)\w*\b/g],
-        },
-        examples: ['Show sales trends over time', 'Revenue growth by month'],
-      },
-      {
-        pattern: /(compare|vs|versus|difference|between)/,
-        type: QueryType.COMPARISON,
-        confidence: 0.8,
-        entityExtractors: {
-          dimensions: [/\b(category|type|group|region|channel)\w*\b/g],
-          measures: [/\b(sales|revenue|count|total|average)\w*\b/g],
-        },
-        examples: ['Compare sales vs revenue', 'Difference between regions'],
-      },
+      // More specific patterns first - they have higher priority
+
+      // Aggregation patterns (very specific)
       {
         pattern:
           /(sum|total|average|avg|mean|count|max|maximum|min|minimum) (of )?(\w+)/,
@@ -129,15 +100,47 @@ export class IntentClassifier {
         },
         examples: ['Sum of sales', 'Average price', 'Count of orders'],
       },
+
+      // Relationship patterns (should come before comparison to catch "between")
       {
-        pattern: /(show only|filter|where|>|<|>=|<=|contains|like)/,
-        type: QueryType.FILTER,
+        pattern: /(correlation|relationship|related|depends)/,
+        type: QueryType.RELATIONSHIP,
         confidence: 0.75,
         entityExtractors: {
-          filters: [/(where|=|>|<|>=|<=|contains|like)\s+(\w+)/g],
+          measures: [/\b(sales|revenue|price|age|score)\w*\b/g],
         },
-        examples: ['Show only sales > 1000', 'Filter where region = North'],
+        examples: [
+          'Correlation between price and sales',
+          'Relationship of age to income',
+        ],
       },
+
+      // Trend patterns (specific time-related analysis)
+      {
+        pattern:
+          /(trend|over time|time series|growth|decline|changes?.*over|changes?.*by)/,
+        type: QueryType.TREND,
+        confidence: 0.85,
+        entityExtractors: {
+          timeColumns: [/\b(date|time|month|year|day)\w*\b/g],
+          measures: [/\b(sales|revenue|price|amount|count|total)\w*\b/g],
+        },
+        examples: ['Show sales trends over time', 'Revenue growth by month'],
+      },
+
+      // Ranking patterns
+      {
+        pattern: /(top|bottom|highest|lowest|best|worst)/,
+        type: QueryType.RANKING,
+        confidence: 0.85,
+        entityExtractors: {
+          limits: [/(?:top|bottom|highest|lowest|best|worst) (\d+)/g],
+          measures: [/\b(sales|revenue|price|score|rating)\w*\b/g],
+        },
+        examples: ['Top 10 customers', 'Highest revenue products'],
+      },
+
+      // Distribution patterns
       {
         pattern: /(distribution|spread|histogram|frequency)/,
         type: QueryType.DISTRIBUTION,
@@ -149,26 +152,41 @@ export class IntentClassifier {
         },
         examples: ['Distribution of ages', 'Price histogram'],
       },
+
+      // Filter patterns
       {
-        pattern: /(top|bottom|highest|lowest|best|worst)/,
-        type: QueryType.RANKING,
-        confidence: 0.85,
+        pattern: /(show only|filter|where|>|<|>=|<=|contains|like)/,
+        type: QueryType.FILTER,
+        confidence: 0.75,
         entityExtractors: {
-          limits: [/(?:top|bottom|highest|lowest|best|worst) (\d+)/g],
-          measures: [/\b(sales|revenue|price|score|rating)\w*\b/g],
+          filters: [/(where|=|>|<|>=|<=|contains|like)\s+(\w+)/g],
         },
-        examples: ['Top 10 customers', 'Highest revenue products'],
+        examples: ['Show only sales > 1000', 'Filter where region = North'],
       },
+
+      // Comparison patterns (less specific, comes after relationship)
       {
-        pattern: /(correlation|relationship|related|depends) (between|of|on)/,
-        type: QueryType.RELATIONSHIP,
+        pattern: /(compare|vs|versus|difference|between)/,
+        type: QueryType.COMPARISON,
         confidence: 0.7,
         entityExtractors: {
-          measures: [/\b(sales|revenue|price|age|score)\w*\b/g],
+          dimensions: [/\b(category|type|group|region|channel)\w*\b/g],
+          measures: [/\b(sales|revenue|count|total|average)\w*\b/g],
         },
+        examples: ['Compare sales vs revenue', 'Difference between regions'],
+      },
+
+      // Profile patterns (broadest, should come last)
+      {
+        pattern:
+          /(what.*data|tell me.*data|show me.*overview|describe.*dataset|overview|summary|profile)/,
+        type: QueryType.PROFILE,
+        confidence: 0.9,
+        entityExtractors: {},
         examples: [
-          'Correlation between price and sales',
-          'Relationship of age to income',
+          'What is in this data?',
+          'Show me an overview',
+          'Describe the dataset',
         ],
       },
     ];
@@ -279,6 +297,71 @@ export class IntentClassifier {
               confidence: 0.9,
             });
           }
+        }
+      }
+    }
+
+    // Extract filters for filter queries
+    if (pattern.entityExtractors.filters || intentType === QueryType.FILTER) {
+      // Add a filter entity for filter queries to ensure canUseCache works correctly
+      if (intentType === QueryType.FILTER) {
+        entities.push({
+          type: 'filter',
+          value: 'filter_condition',
+          confidence: 0.8,
+        });
+      }
+
+      if (pattern.entityExtractors.filters) {
+        for (const regex of pattern.entityExtractors.filters) {
+          const matches = Array.from(query.matchAll(regex));
+          for (const match of matches) {
+            entities.push({
+              type: 'filter',
+              value: match[2] || match[1] || match[0],
+              confidence: 0.7,
+            });
+          }
+        }
+      }
+    }
+
+    // Extract any column names mentioned in the query
+    for (const column of availableColumns) {
+      if (query.includes(column.toLowerCase())) {
+        // Determine if it's likely a measure or dimension
+        const isMeasure = [
+          'price',
+          'amount',
+          'total',
+          'count',
+          'sales',
+          'revenue',
+          'quantity',
+          'cost',
+          'value',
+        ].some(measure => column.toLowerCase().includes(measure));
+
+        if (
+          isMeasure &&
+          !entities.some(e => e.column === column && e.type === 'measure')
+        ) {
+          entities.push({
+            type: 'measure',
+            value: column,
+            column: column,
+            confidence: 0.9,
+          });
+        } else if (
+          !isMeasure &&
+          !entities.some(e => e.column === column && e.type === 'dimension')
+        ) {
+          entities.push({
+            type: 'dimension',
+            value: column,
+            column: column,
+            confidence: 0.9,
+          });
         }
       }
     }
