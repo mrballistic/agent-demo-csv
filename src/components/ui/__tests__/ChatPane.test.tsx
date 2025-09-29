@@ -15,14 +15,17 @@ vi.mock('@/hooks/useChat', () => ({
   })),
 }));
 
+// Import the mocked hook so we can control its return value in tests
+import { useChat } from '@/hooks/useChat';
+
 describe('ChatPane Component', () => {
   const mockSendMessage = vi.fn();
   const mockClearMessages = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    // Use the mocked import
+    (useChat as any).mockReturnValue({
       messages: [],
       isLoading: false,
       sendMessage: mockSendMessage,
@@ -46,8 +49,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should display messages in conversation', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -122,8 +124,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should disable input and button when loading', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [],
       isLoading: true,
       sendMessage: mockSendMessage,
@@ -141,8 +142,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should show loading indicator when processing', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -163,8 +163,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should display error messages', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [],
       isLoading: false,
       sendMessage: mockSendMessage,
@@ -178,7 +177,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should scroll to bottom when new messages arrive', async () => {
-    const { useChat } = require('@/hooks/useChat');
+    // Use imported mocked hook
 
     // Mock scrollIntoView
     const mockScrollIntoView = vi.fn();
@@ -187,7 +186,7 @@ describe('ChatPane Component', () => {
     const { rerender } = render(<ChatPane messages={[]} />);
 
     // Add a new message
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -210,8 +209,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should handle system messages differently', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -235,9 +233,7 @@ describe('ChatPane Component', () => {
 
   it('should format timestamps correctly', () => {
     const testTimestamp = new Date('2024-01-01T12:00:00Z').getTime();
-
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -286,8 +282,7 @@ describe('ChatPane Component', () => {
   });
 
   it('should handle message with artifacts', () => {
-    const { useChat } = require('@/hooks/useChat');
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -317,10 +312,8 @@ describe('ChatPane Component', () => {
   });
 
   it('should handle streaming message updates', async () => {
-    const { useChat } = require('@/hooks/useChat');
-
     // Initial state with partial message
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',
@@ -341,7 +334,7 @@ describe('ChatPane Component', () => {
     expect(screen.getByText(/analyzing your data\.\.\./i)).toBeInTheDocument();
 
     // Update with complete message
-    useChat.mockReturnValue({
+    (useChat as any).mockReturnValue({
       messages: [
         {
           id: '1',

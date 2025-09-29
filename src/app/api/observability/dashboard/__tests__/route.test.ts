@@ -226,7 +226,7 @@ describe('/api/observability/dashboard', () => {
   it('should determine system health correctly', async () => {
     // Test healthy status
     vi.mocked(telemetryService.getErrorStats).mockReturnValue({
-      totalErrors: 1,
+      totalErrors: 0,
       errorsByType: {} as any,
       errorsByClass: {},
       retryableErrors: 0,

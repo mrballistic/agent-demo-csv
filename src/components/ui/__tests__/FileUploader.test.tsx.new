@@ -1,0 +1,88 @@
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import FileUploader from '../FileUploader';
+
+// Mock fetch for file upload
+global.fetch = vi.fn();
+
+describe('FileUploader Component', () => {
+  const mockOnUploadSuccess = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (global.fetch as any).mockClear();
+  });
+
+  const defaultProps = {
+    onFileUploaded: mockOnUploadSuccess,
+    onSystemMessage: vi.fn(),
+  } as any;
+
+  it('renders upload area with controls', () => {
+    render(<FileUploader {...defaultProps} />);
+
+    expect(screen.getByRole('heading', { name: /drag and drop your csv file here/i })).toBeInTheDocument();
+    expect(screen.getByText(/click to browse/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /choose csv file to upload/i })).toBeInTheDocument();
+  });
+
+  it('uploads a CSV via file input and reports success', async () => {
+    const user = userEvent.setup();
+    render(<FileUploader {...defaultProps} />);
+
+    const csvContent = 'name,age\nJohn,30';
+    const file = new File([csvContent], 'test.csv', { type: 'text/csv' });
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ fileId: 'file_1', filename: 'test.csv', size: csvContent.length, rowCount: 1 }),
+    });
+
+    const input = screen.getByLabelText(/^Choose CSV file$/i) as HTMLInputElement;
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(mockOnUploadSuccess).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'file_1' }));
+      expect(screen.getByText(/File uploaded successfully!/i)).toBeInTheDocument();
+    });
+  });
+
+  it('handles drag and drop with dataTransfer and reports success', async () => {
+    render(<FileUploader {...defaultProps} />);
+
+    const csvContent = 'a,b\n1,2';
+    const file = new File([csvContent], 'a.csv', { type: 'text/csv' });
+
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({ fileId: 'file_2', filename: 'a.csv' }) });
+
+    const dropZone = screen.getByRole('heading', { name: /drag and drop your csv file here/i }).closest('div')!;
+    fireEvent.dragEnter(dropZone, { dataTransfer: { files: [file], items: [{ kind: 'file', type: 'text/csv' }], types: ['Files'] } });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mockOnUploadSuccess).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'file_2' }));
+      expect(screen.getByText(/File uploaded successfully!/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows validation error for non-csv', async () => {
+    render(<FileUploader {...defaultProps} />);
+    const user = userEvent.setup();
+    const txt = new File(['x'], 'x.txt', { type: 'text/plain' });
+    const input = screen.getByLabelText(/^Choose CSV file$/i) as HTMLInputElement;
+    await user.upload(input, txt);
+    await waitFor(() => expect(screen.getByText(/Please upload a CSV file/i)).toBeInTheDocument());
+  });
+
+  it('rejects oversized files', async () => {
+    render(<FileUploader {...defaultProps} />);
+    const user = userEvent.setup();
+    const big = new File(['0'], 'big.csv', { type: 'text/csv' });
+    Object.defineProperty(big, 'size', { value: 51 * 1024 * 1024 });
+    const input = screen.getByLabelText(/^Choose CSV file$/i) as HTMLInputElement;
+    await user.upload(input, big);
+    await waitFor(() => expect(screen.getByText(/exceeds the 50MB limit/i)).toBeInTheDocument());
+  });
+});
