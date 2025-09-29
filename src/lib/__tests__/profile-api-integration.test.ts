@@ -67,7 +67,16 @@ vi.mock('../../lib/error-handler', () => ({
   defaultRetryHandler: {
     executeWithRetry: vi.fn(),
   },
-  classifyError: vi.fn(),
+  classifyError: vi.fn(error => ({
+    type: 'UNKNOWN_ERROR',
+    message: error.message || 'Unknown error',
+    errorClass: 'unknown',
+    retryable: false,
+    toErrorResponse: () => ({
+      success: false,
+      error: error.message || 'Unknown error',
+    }),
+  })),
   createErrorTelemetry: vi.fn(),
 }));
 
@@ -256,7 +265,13 @@ describe('Profile API Integration', () => {
 
     expect(response.status).toBe(200);
     expect(result.status).toBe('completed');
-    expect(result.profile).toEqual(mockProfile);
+    // Compare profile with date serialization adjustments
+    const expectedProfile = {
+      ...mockProfile,
+      createdAt: mockProfile.createdAt.toISOString(),
+      expiresAt: mockProfile.expiresAt.toISOString(),
+    };
+    expect(result.profile).toEqual(expectedProfile);
     expect(result.sessionId).toBe('test-session');
     expect(result.threadId).toBe('test-thread');
 
