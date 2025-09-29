@@ -82,11 +82,15 @@ describe('Profiling API Endpoints', () => {
 
       expect(response.status).toBe(200);
       expect(data).toMatchObject({
-        runId: 'run_test123',
-        threadId: 'thread_test123',
-        sessionId: 'session_test123',
+        runId: expect.stringMatching(/^run_\d+_[a-z0-9]+$/),
+        threadId: expect.stringMatching(/^thread_\d+_[a-z0-9]+$/),
+        sessionId: expect.any(String),
         status: 'queued',
       });
+
+      // Verify the IDs are actually generated dynamically
+      expect(data.runId).toMatch(/^run_/);
+      expect(data.threadId).toMatch(/^thread_/);
     });
 
     it('should return error when fileId is missing', async () => {
@@ -105,7 +109,13 @@ describe('Profiling API Endpoints', () => {
       const data = await response.json();
 
       expect(response.status).toBe(400);
-      expect(data.error).toBe('fileId is required');
+      expect(data).toMatchObject({
+        message: 'fileId is required',
+        type: 'validation_error',
+        errorClass: 'missing_file_id',
+        suggestedAction: 'Please provide a valid fileId',
+        retryable: false,
+      });
     });
   });
 

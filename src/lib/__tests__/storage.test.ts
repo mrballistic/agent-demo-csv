@@ -6,10 +6,30 @@ import fs from 'fs/promises';
 import path from 'path';
 
 // Mock fs for testing
-vi.mock('fs/promises');
-vi.mock('fs', () => ({
-  existsSync: vi.fn(() => true),
-}));
+vi.mock('fs/promises', async importOriginal => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as object),
+    default: {
+      mkdir: vi.fn(),
+      writeFile: vi.fn(),
+      readFile: vi.fn(),
+      unlink: vi.fn(),
+      rmdir: vi.fn(),
+      readdir: vi.fn(),
+    },
+  };
+});
+
+vi.mock('fs', async importOriginal => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as object),
+    existsSync: vi.fn(() => true),
+    readdirSync: vi.fn(() => []),
+    readFileSync: vi.fn(() => 'test content'),
+  };
+});
 
 describe('SessionStore', () => {
   let sessionStore: SessionStore;
