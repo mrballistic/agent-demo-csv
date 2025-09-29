@@ -47,6 +47,9 @@ export class IntentClassifier {
     );
 
     // Build the query intent
+    const timeEntity = entities.find(e => e.type === 'time');
+    const limitEntity = entities.find(e => e.type === 'limit');
+
     const intent: QueryIntent = {
       type: bestMatch.type,
       confidence: bestMatch.confidence,
@@ -59,10 +62,8 @@ export class IntentClassifier {
         .filter(e => e.type === 'dimension')
         .map(e => e.column || e.value),
       filters: entities.filter(e => e.type === 'filter'),
-      timeColumn: entities.find(e => e.type === 'time')?.column,
-      limit: entities.find(e => e.type === 'limit')?.value
-        ? parseInt(entities.find(e => e.type === 'limit')!.value)
-        : undefined,
+      timeColumn: timeEntity?.column,
+      limit: limitEntity?.value ? parseInt(limitEntity.value) : undefined,
       requiresLLM: this.shouldUseLLM(
         bestMatch.type,
         bestMatch.confidence,
@@ -74,7 +75,7 @@ export class IntentClassifier {
 
     return {
       intent,
-      alternatives: patternMatches.slice(1, 4), // Include up to 3 alternatives
+      alternatives: patternMatches.slice(1, 4),
       processingTime: Date.now() - startTime,
     };
   }
@@ -84,7 +85,6 @@ export class IntentClassifier {
    */
   private initializePatterns(): void {
     this.patterns = [
-      // Profile patterns
       {
         pattern:
           /^(what|tell me|show me|describe).*(data|dataset|file|csv)|overview|summary|profile/,
@@ -97,11 +97,8 @@ export class IntentClassifier {
           'Describe the dataset',
         ],
       },
-
-      // Trend patterns
       {
-        pattern:
-          /(trend|over time|time series|change|growth|decline).*(month|year|day|date|time)/,
+        pattern: /(trend|over time|time series|growth|decline|change.*time)/,
         type: QueryType.TREND,
         confidence: 0.85,
         entityExtractors: {
@@ -110,10 +107,8 @@ export class IntentClassifier {
         },
         examples: ['Show sales trends over time', 'Revenue growth by month'],
       },
-
-      // Comparison patterns
       {
-        pattern: /(compare|vs|versus|difference|between).+and|compare.*to/,
+        pattern: /(compare|vs|versus|difference|between)/,
         type: QueryType.COMPARISON,
         confidence: 0.8,
         entityExtractors: {
@@ -122,8 +117,6 @@ export class IntentClassifier {
         },
         examples: ['Compare sales vs revenue', 'Difference between regions'],
       },
-
-      // Aggregation patterns
       {
         pattern:
           /(sum|total|average|avg|mean|count|max|maximum|min|minimum) (of )?(\w+)/,
@@ -136,10 +129,8 @@ export class IntentClassifier {
         },
         examples: ['Sum of sales', 'Average price', 'Count of orders'],
       },
-
-      // Filter patterns
       {
-        pattern: /(show|filter|where|only).*(where|=|>|<|>=|<=|contains|like)/,
+        pattern: /(show only|filter|where|>|<|>=|<=|contains|like)/,
         type: QueryType.FILTER,
         confidence: 0.75,
         entityExtractors: {
@@ -147,10 +138,8 @@ export class IntentClassifier {
         },
         examples: ['Show only sales > 1000', 'Filter where region = North'],
       },
-
-      // Distribution patterns
       {
-        pattern: /(distribution|spread|histogram|frequency) (of )?(\w+)/,
+        pattern: /(distribution|spread|histogram|frequency)/,
         type: QueryType.DISTRIBUTION,
         confidence: 0.8,
         entityExtractors: {
@@ -160,10 +149,8 @@ export class IntentClassifier {
         },
         examples: ['Distribution of ages', 'Price histogram'],
       },
-
-      // Ranking patterns
       {
-        pattern: /(top|bottom|highest|lowest|best|worst) (\d+)?/,
+        pattern: /(top|bottom|highest|lowest|best|worst)/,
         type: QueryType.RANKING,
         confidence: 0.85,
         entityExtractors: {
@@ -172,8 +159,6 @@ export class IntentClassifier {
         },
         examples: ['Top 10 customers', 'Highest revenue products'],
       },
-
-      // Relationship patterns
       {
         pattern: /(correlation|relationship|related|depends) (between|of|on)/,
         type: QueryType.RELATIONSHIP,
@@ -189,14 +174,7 @@ export class IntentClassifier {
     ];
   }
 
-  /**
-   * Match query against known patterns
-   */
-  private matchPatterns(query: string): Array<{
-    type: QueryType;
-    confidence: number;
-    reason: string;
-  }> {
+  private matchPatterns(query: string) {
     const matches: Array<{
       type: QueryType;
       confidence: number;
@@ -213,21 +191,15 @@ export class IntentClassifier {
       }
     }
 
-    // Sort by confidence descending
     return matches.sort((a, b) => b.confidence - a.confidence);
   }
 
-  /**
-   * Extract entities from query based on intent type
-   */
   private extractEntities(
     query: string,
     intentType: QueryType,
     availableColumns: string[]
   ): QueryEntity[] {
     const entities: QueryEntity[] = [];
-
-    // Find the pattern for this intent type
     const pattern = this.patterns.find(p => p.type === intentType);
     if (!pattern) return entities;
 
@@ -300,11 +272,13 @@ export class IntentClassifier {
       for (const regex of pattern.entityExtractors.limits) {
         const matches = Array.from(query.matchAll(regex));
         for (const match of matches) {
-          entities.push({
-            type: 'limit',
-            value: match[1],
-            confidence: 0.9,
-          });
+          if (match[1]) {
+            entities.push({
+              type: 'limit',
+              value: match[1],
+              confidence: 0.9,
+            });
+          }
         }
       }
     }
@@ -312,9 +286,6 @@ export class IntentClassifier {
     return entities;
   }
 
-  /**
-   * Find the best matching column for a given term
-   */
   private findBestColumnMatch(
     term: string,
     availableColumns: string[],
@@ -345,57 +316,35 @@ export class IntentClassifier {
         col.toLowerCase().includes(lowerTerm) ||
         lowerTerm.includes(col.toLowerCase())
     );
-    if (partialMatch) return partialMatch;
-
-    return undefined;
+    return partialMatch;
   }
 
-  /**
-   * Determine if query requires LLM processing
-   */
   private shouldUseLLM(
     intentType: QueryType,
     confidence: number,
     entities: QueryEntity[]
   ): boolean {
-    // Always use LLM for unknown queries
     if (intentType === QueryType.UNKNOWN) return true;
-
-    // Use LLM if confidence is too low
     if (confidence < 0.6) return true;
-
-    // Use LLM for complex relationship queries
     if (intentType === QueryType.RELATIONSHIP) return true;
-
-    // Use semantic layer for simple, high-confidence queries
     return false;
   }
 
-  /**
-   * Determine if query results can be cached
-   */
   private canCacheQuery(
     intentType: QueryType,
     entities: QueryEntity[]
   ): boolean {
-    // Profile queries can always be cached
     if (intentType === QueryType.PROFILE) return true;
-
-    // Queries without filters can be cached
     const hasFilters = entities.some(e => e.type === 'filter');
     return !hasFilters;
   }
 
-  /**
-   * Estimate query execution cost (1-10 scale)
-   */
   private estimateQueryCost(
     intentType: QueryType,
     entities: QueryEntity[]
   ): number {
     let cost = 1;
 
-    // Base cost by intent type
     switch (intentType) {
       case QueryType.PROFILE:
         cost = 2;
@@ -426,7 +375,6 @@ export class IntentClassifier {
         break;
     }
 
-    // Increase cost for multiple entities
     const entityCount = entities.length;
     if (entityCount > 3) cost += 2;
     if (entityCount > 6) cost += 3;

@@ -131,11 +131,11 @@ describe('Profile API Integration', () => {
     expect(result.data.profile).toEqual(mockProfile);
 
     // Verify agent orchestrator was called correctly
-    expect(mockGlobalOrchestrator.getAgent).toHaveBeenCalledWith(
+    expect(globalOrchestrator.getAgent).toHaveBeenCalledWith(
       AgentType.PROFILING
     );
-    expect(mockGlobalOrchestrator.registerAgent).toHaveBeenCalled();
-    expect(mockGlobalOrchestrator.processDataUpload).toHaveBeenCalledWith({
+    expect(globalOrchestrator.registerAgent).toHaveBeenCalled();
+    expect(globalOrchestrator.processDataUpload).toHaveBeenCalledWith({
       buffer: mockFileContent,
       name: 'test.csv',
       mimeType: 'text/csv',
@@ -143,22 +143,19 @@ describe('Profile API Integration', () => {
     });
 
     // Verify session was updated with profile data
-    expect(mockSessionStore.updateSession).toHaveBeenCalledWith(
-      'test-session',
-      {
-        uploadedFile: {
-          id: 'test-file-id',
-          filename: 'test.csv',
-          size: mockFileContent.length,
-          checksum: 'test-checksum',
-        },
-        dataProfile: mockProfile,
-      }
-    );
+    expect(sessionStore.updateSession).toHaveBeenCalledWith('test-session', {
+      uploadedFile: {
+        id: 'test-file-id',
+        filename: 'test.csv',
+        size: mockFileContent.length,
+        checksum: 'test-checksum',
+      },
+      dataProfile: mockProfile,
+    });
   });
 
   it('should handle missing file error', async () => {
-    mockFileStore.getFile.mockResolvedValue(null);
+    fileStore.getFile.mockResolvedValue(null);
 
     const request = new NextRequest(
       'http://localhost:3000/api/analysis/profile',
@@ -178,7 +175,7 @@ describe('Profile API Integration', () => {
   });
 
   it('should handle profiling agent errors gracefully', async () => {
-    mockGlobalOrchestrator.processDataUpload.mockRejectedValue(
+    vi.mocked(globalOrchestrator.processDataUpload).mockRejectedValue(
       new Error('Agent processing failed')
     );
 
@@ -201,7 +198,7 @@ describe('Profile API Integration', () => {
 
   it('should reuse existing profiling agent if already registered', async () => {
     const mockExistingAgent = { type: AgentType.PROFILING };
-    mockGlobalOrchestrator.getAgent.mockReturnValue(mockExistingAgent);
+    globalOrchestrator.getAgent.mockReturnValue(mockExistingAgent);
 
     const request = new NextRequest(
       'http://localhost:3000/api/analysis/profile',
@@ -219,8 +216,8 @@ describe('Profile API Integration', () => {
     expect(result.success).toBe(true);
 
     // Should not register a new agent
-    expect(mockGlobalOrchestrator.registerAgent).not.toHaveBeenCalled();
+    expect(globalOrchestrator.registerAgent).not.toHaveBeenCalled();
     // But should still process the upload
-    expect(mockGlobalOrchestrator.processDataUpload).toHaveBeenCalled();
+    expect(globalOrchestrator.processDataUpload).toHaveBeenCalled();
   });
 });
