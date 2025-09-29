@@ -1,25 +1,35 @@
 # Active Context
 
-## Current Priority: OpenAI Streaming Issue Resolution
+## Current Priority: Semantic Data Layer Implementation
 
 ### Problem Statement
 
-- OpenAI API is working (verified with test scripts) but returning "Sorry, something went wrong" server_error during Assistant API streaming
-- Current fallback system shows error message to user before switching to simulation
-- User wants seamless experience without showing "Analysis failed" message
+Current system uses "throw everything at the LLM" approach:
 
-### Solution Implemented ✅
+- Sends entire CSV content directly to GPT-4 (up to 8MB after sampling)
+- No data profiling pipeline or schema inference
+- No statistical preprocessing or optimization
+- No indexing for repeated queries
+- Expensive token usage and slow response times
 
-- **Silent Fallback**: Modified `thread.run.failed` handler to NOT send failure event to client
-- **Enhanced Diagnostics**: Created diagnostic tool to identify specific failure points
-- **Root Cause Investigation**: Integrated diagnostics into streaming pipeline
+### Strategic Direction: Multi-Agent Semantic Layer
 
-### Technical Details
+Implementing hybrid approach with specialized agents:
 
-- OpenAI API key: Valid and working (chat completions and assistant creation successful)
-- Issue: `thread.run.failed` events with server_error code during streaming
-- **Fixed Behavior**: Silent fallback without showing error to user
-- **Diagnostic Tool**: `src/lib/openai-diagnostics.ts` for systematic issue identification
+- **Data Profiling Agent**: Pre-compute schema, statistics, quality metrics
+- **Query Planning Agent**: Translate natural language to optimized operations
+- **Security Agent**: PII detection and data redaction
+- **Chart Generation Agent**: Specialized visualization engine
+- **Conversation Agent**: Context-aware follow-up handling
+
+### Technical Approach
+
+Following Kiro-Lite workflow: **PRD → Design → Tasks → Code**
+
+1. Define semantic layer requirements and success metrics
+2. Design multi-agent architecture and data models
+3. Break down into implementable tasks
+4. Execute with continuous validation
 
 ### Implementation Status
 
