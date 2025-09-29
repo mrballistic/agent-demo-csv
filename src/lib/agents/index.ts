@@ -1,0 +1,56 @@
+// Public API exports for the agent system
+
+export type { Agent, AgentHealthStatus } from './base';
+
+export { BaseAgent, createExecutionContext, retryExecution } from './base';
+
+export {
+  AgentOrchestrator,
+  globalOrchestrator,
+  getOrchestrator,
+} from './orchestrator';
+
+export type { UploadedFile } from './orchestrator';
+
+export type {
+  // Core types
+  AgentMessage,
+  AgentExecutionContext,
+  AgentResult,
+  ResourceStatus,
+
+  // Data types
+  DataProfile,
+  FileMetadata,
+  SchemaProfile,
+  ColumnProfile,
+  QualityMetrics,
+  SecurityProfile,
+  PIIColumn,
+  DataInsights,
+
+  // Query types
+  QueryIntent,
+  FilterCondition,
+  TimeRange,
+  ExecutionPlan,
+
+  // Chart types
+  ChartConfig,
+  ChartType,
+  ChartOutput,
+
+  // Analysis types
+  AnalysisResult,
+  GeneratedInsight,
+} from './types';
+
+export {
+  AgentType,
+  MessageType,
+  AgentError,
+  AgentTimeoutError,
+  AgentValidationError,
+} from './types';
+
+export { DataProfilingAgent } from './profiling-agent';

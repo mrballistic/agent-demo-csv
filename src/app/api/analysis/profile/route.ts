@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { conversationManager } from '@/lib/openai-responses';
 import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
 import {
@@ -11,6 +10,12 @@ import {
   createErrorTelemetry,
 } from '@/lib/error-handler';
 import { telemetryService, Telemetry } from '@/lib/telemetry';
+import {
+  DataProfilingAgent,
+  globalOrchestrator,
+  createExecutionContext,
+  AgentType,
+} from '@/lib/agents';
 
 export const runtime = 'nodejs';
 
@@ -92,6 +97,12 @@ export async function POST(request: NextRequest) {
     );
 
     try {
+      // Initialize agent orchestrator if needed
+      if (!globalOrchestrator.getAgent(AgentType.PROFILING)) {
+        const profilingAgent = new DataProfilingAgent();
+        globalOrchestrator.registerAgent(profilingAgent);
+      }
+
       // Use retry handler for profile analysis
       const result = await defaultRetryHandler.executeWithRetry(async () => {
         // Get the file content from our file store
@@ -102,7 +113,18 @@ export async function POST(request: NextRequest) {
           throw new Error(`File not found in store: ${fileId}`);
         }
 
-        // Store file reference in session for streaming endpoint
+        // Execute data profiling using agent orchestrator
+        const uploadedFile = {
+          buffer: fileContent,
+          name: fileMetadata.originalName,
+          mimeType: fileMetadata.mimeType || 'text/csv',
+          size: fileMetadata.size,
+        };
+
+        const profile =
+          await globalOrchestrator.processDataUpload(uploadedFile);
+
+        // Store profile and file reference in session for streaming endpoint
         sessionStore.updateSession(session.id, {
           uploadedFile: {
             id: fileId,
@@ -110,6 +132,7 @@ export async function POST(request: NextRequest) {
             size: fileMetadata.size,
             checksum: fileMetadata.checksum,
           },
+          dataProfile: profile,
         });
 
         // Generate a run ID for tracking
@@ -119,7 +142,8 @@ export async function POST(request: NextRequest) {
           runId,
           threadId: session.threadId,
           sessionId: session.id,
-          status: 'queued',
+          status: 'completed',
+          profile: profile,
         };
       }, 'profile_analysis');
 

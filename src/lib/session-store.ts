@@ -18,6 +18,7 @@ export interface SessionData {
     checksum: string;
     openaiFileId?: string;
   };
+  dataProfile?: any; // Data profiling result from agents
   messages: Array<{
     id: string;
     role: 'user' | 'assistant' | 'system';
