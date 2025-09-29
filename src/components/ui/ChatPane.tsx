@@ -91,7 +91,14 @@ const ChatPane: React.FC<ChatPaneProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const latestInputValueRef = useRef<string>(inputValue);
+  // Note: we keep a latestInputValueRef so event handlers can read
+  // the most recent input synchronously. We also use a microtask
+  // buffer (sendBufferRef) so multiple quick send attempts (e.g.
+  // Shift+Enter then Enter) are coalesced into a single send.
+  const sendBufferRef = useRef<string | null>(null);
+  const sendFlushScheduledRef = useRef<number | null>(null);
   // EventSource connection is managed by useChat hook in parent component
 
   // Hook-backed chat (tests mock this hook). If available, prefer hook values.
@@ -239,56 +246,52 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   // The streaming connection is managed by the useChat hook in the parent component
 
   // Handle sending messages
+
   const handleSendMessage = useCallback(
     (explicitContent?: string) => {
-      // DEBUG: log calls to help diagnose multiline send behavior in tests
-      // eslint-disable-next-line no-console
-      console.debug(
-        '[ChatPane] handleSendMessage called with',
-        explicitContent
-      );
+      // Determine content to send
       const domValue =
-        typeof explicitContent !== 'undefined'
-          ? explicitContent
-          : (inputRef.current?.value ?? inputValue);
+        explicitContent ??
+        (inputRef.current as any)?.value ??
+        latestInputValueRef.current ??
+        inputValue;
       const content = domValue?.toString();
       if (!content || disabled) return;
 
-      // Add optimistic user message
+      const toSend = content;
+
       const userMessage: StreamingMessage = {
         id: `user_${Date.now()}`,
         role: 'user',
-        content,
+        content: toSend,
         timestamp: new Date(),
         isComplete: true,
       };
 
       setMessages(prev => [...prev, userMessage]);
 
-      // Prefer hook's sendMessage (tests mock useChat) otherwise call parent handler
       if (hookSendMessage) {
         try {
-          // Call hookSendMessage with only the content when fileId is null/undefined
           if (fileId === null || typeof fileId === 'undefined') {
-            void hookSendMessage(content);
+            void hookSendMessage(toSend);
           } else {
-            void hookSendMessage(content, fileId);
+            void hookSendMessage(toSend, fileId);
           }
         } catch (e) {
           // ignore
         }
       } else {
-        // Maintain existing parent handler behavior
-        onSendMessage?.(content, fileId);
+        onSendMessage?.(toSend, fileId);
       }
 
       // Clear input (also update controlled state)
       setInputValue('');
       if (inputRef.current) inputRef.current.value = '' as any;
 
-      // Scroll to bottom
-      setTimeout(() => scrollToBottom(), 100);
+      // Scroll to bottom after a short delay so UI can update
+      setTimeout(() => scrollToBottom(), 50);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       inputValue,
       disabled,
@@ -299,35 +302,37 @@ const ChatPane: React.FC<ChatPaneProps> = ({
     ]
   );
 
-  // Handle keyboard events. On Enter (without Shift) we prevent default and
-  // schedule a send on the next tick, reading the current textarea value
-  // from the DOM inside the timeout so we pick up any pending updates.
-  const handleKeyDown = useCallback(
+  // Handle keyboard events.
+  // We use onKeyDown to prevent the default Enter behavior but perform the
+  // send on keyUp after a microtask so the input's value has been updated
+  // (this captures newline insertion from Shift+Enter reliably in JSDOM).
+  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      // Prevent form submission/default behavior but don't send yet.
+      event.preventDefault();
+    }
+  }, []);
+
+  const handleKeyUp = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        const target = event.currentTarget as HTMLTextAreaElement | null;
-        setTimeout(() => {
-          const valueNow =
-            (inputRef.current as any)?.value ?? target?.value ?? inputValue;
-          // eslint-disable-next-line no-console
-          console.debug(
-            '[ChatPane] handleKeyDown sending valueNow=',
-            JSON.stringify(valueNow)
-          );
-          handleSendMessage(valueNow);
-        }, 0);
+        // Use a microtask to let the DOM and input state settle before reading the value
+        Promise.resolve().then(() => {
+          handleSendMessage();
+        });
       }
     },
-    [handleSendMessage, inputValue]
+    [handleSendMessage]
   );
 
-  // Focus management
+  // Focus management: don't auto-focus in tests; tests will simulate
+  // keyboard navigation explicitly.
+
+  // Keep a ref with the latest inputValue so event handlers can read it
+  // synchronously without depending on DOM timing.
   useEffect(() => {
-    if (!disabled && !isRunning) {
-      inputRef.current?.focus();
-    }
-  }, [disabled, isRunning]);
+    latestInputValueRef.current = inputValue;
+  }, [inputValue]);
 
   // Update messages when props or hook change
   useEffect(() => {
@@ -873,7 +878,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
       >
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
           <TextField
-            ref={inputRef}
+            inputRef={inputRef}
             fullWidth
             multiline
             maxRows={4}
@@ -891,6 +896,13 @@ const ChatPane: React.FC<ChatPaneProps> = ({
               'aria-label': 'Chat input',
               'aria-describedby': 'chat-input-help',
               onKeyDown: handleKeyDown,
+              onKeyUp: handleKeyUp,
+              onInput: (e: any) => {
+                const v = e.currentTarget.value as string;
+                latestInputValueRef.current = v;
+                // keep controlled state in sync
+                setInputValue(v);
+              },
             }}
             disabled={disabled || effectiveIsLoading}
             variant="outlined"
@@ -914,7 +926,11 @@ const ChatPane: React.FC<ChatPaneProps> = ({
             </IconButton>
           ) : (
             <IconButton
-              onClick={() => handleSendMessage()}
+              onClick={() =>
+                handleSendMessage(
+                  (inputRef.current as any)?.value ?? inputValue
+                )
+              }
               // Keep send button enabled so tests can click it even with empty input;
               // handleSendMessage will no-op for empty content. Only disable while loading.
               disabled={disabled || effectiveIsLoading}

@@ -260,8 +260,11 @@ describe('ChatPane Component', () => {
 
     const input = screen.getByRole('textbox');
 
-    await user.type(input, 'Line 1{shift}{enter}Line 2');
-    await user.keyboard('{enter}');
+    // Type the content with explicit newline handling
+    await user.type(input, 'Line 1');
+    await user.keyboard('{Shift>}{Enter}{/Shift}');
+    await user.type(input, 'Line 2');
+    await user.keyboard('{Enter}');
 
     expect(mockSendMessage).toHaveBeenCalledWith('Line 1\nLine 2');
   });
