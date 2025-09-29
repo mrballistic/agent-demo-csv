@@ -13,7 +13,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
   properties: {
     insight: {
       type: 'string',
-      description: 'A 2-3 line plain-English insight from the analysis',
+      description: 'A 3-8 line plain-English insight from the analysis',
     },
     files: {
       type: 'array',
@@ -137,7 +137,7 @@ Contract:
 
 5) JSON RESPONSE FORMAT - MUST FOLLOW EXACTLY:
 {
-  "insight": "2-3 line plain English summary of findings",
+  "insight": "3-8 line plain English summary of findings",
   "files": [{"path": "/tmp/plot.png", "type": "image", "purpose": "chart"}],
   "chart_data": {
     "chart_type": "bar",
