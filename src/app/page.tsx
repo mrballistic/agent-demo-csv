@@ -41,9 +41,6 @@ export default function Home() {
   const [hasUploadedFile, setHasUploadedFile] = useState(false);
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
-  const [runStatus, setRunStatus] = useState<
-    'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
-  >('idle');
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [queuePosition, setQueuePosition] = useState<number | undefined>();
   const [estimatedWaitTime, setEstimatedWaitTime] = useState<
@@ -72,21 +69,6 @@ export default function Home() {
     setArtifacts(prev => [...prev, artifactItem]);
   }, []);
 
-  const handleRunStatusChange = useCallback(
-    (
-      status:
-        | 'idle'
-        | 'queued'
-        | 'running'
-        | 'completed'
-        | 'failed'
-        | 'cancelled'
-    ) => {
-      setRunStatus(status);
-    },
-    []
-  );
-
   const handleQueueUpdate = useCallback(
     (position?: number, waitTime?: number) => {
       setQueuePosition(position);
@@ -107,7 +89,6 @@ export default function Home() {
   } = useChat({
     threadId: threadId ?? undefined,
     onArtifactCreated: handleArtifactCreated,
-    onRunStatusChange: handleRunStatusChange,
     onQueueUpdate: handleQueueUpdate,
   });
 
@@ -120,9 +101,11 @@ export default function Home() {
   // Update elapsed time for running analyses
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    let startTime: number;
 
     if (hookRunStatus === 'running') {
-      const startTime = Date.now();
+      startTime = Date.now();
+      setElapsedTime(0); // Start from 0
       interval = setInterval(() => {
         setElapsedTime(Date.now() - startTime);
       }, 1000);
@@ -153,8 +136,6 @@ export default function Home() {
 
     // Automatically start profiling to create OpenAI thread
     try {
-      setRunStatus('running');
-
       const profileResponse = await fetch('/api/analysis/profile', {
         method: 'POST',
         headers: {
@@ -185,7 +166,6 @@ export default function Home() {
       addMessage(profilingMessage);
     } catch (error) {
       console.error('Failed to start profiling:', error);
-      setRunStatus('idle');
 
       const errorMessage: ChatMessage = {
         id: `error_${Date.now()}`,
@@ -214,7 +194,22 @@ export default function Home() {
     const query =
       queries[actionId as keyof typeof queries] ||
       `Perform ${analysisType} analysis on this data`;
-    await sendMessage(query, currentFileId);
+
+    // Send the message using the useChat hook's sendMessage function
+    // This ensures the user message is properly displayed in the chat
+    try {
+      await sendMessage(query, currentFileId);
+    } catch (error) {
+      console.error('Failed to send quick action message:', error);
+      // Add error message to chat
+      const errorMessage: ChatMessage = {
+        id: `error_${Date.now()}`,
+        role: 'system',
+        content: `❌ Failed to start ${actionId} analysis: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      addMessage(errorMessage);
+    }
   };
 
   const handleRetryAnalysis = () => {
@@ -234,7 +229,6 @@ export default function Home() {
     setHasUploadedFile(false);
     setCurrentFileId(null);
     setArtifacts([]);
-    setRunStatus('idle');
     setElapsedTime(0);
     setQueuePosition(undefined);
     setEstimatedWaitTime(undefined);

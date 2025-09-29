@@ -386,12 +386,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const sampleDatasets = [
     {
-      name: 'Valid Sales Data',
-      filename: 'valid-sales-data.csv',
-      description: 'Clean sales data with all required columns',
+      name: 'Comprehensive Sales Data',
+      filename: 'ai-analyst-demo_orders_small.csv',
+      description:
+        'Rich sales dataset with customer details, channels, and product categories',
       icon: <DataObject color="primary" />,
-      rows: 20,
-      features: ['Revenue analysis', 'Channel performance', 'Trend analysis'],
+      rows: 34626,
+      features: [
+        'Deep revenue analysis',
+        'Customer segmentation',
+        'Multi-channel insights',
+        'Geographic analysis',
+      ],
     },
     {
       name: 'Data with PII',
@@ -484,7 +490,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
           <Stack spacing={2} alignItems="center">
             {uploadState.success ? (
-              <CheckCircle color="success" sx={{ fontSize: 48 }} />
+              <CheckCircle sx={{ fontSize: 48, color: 'success.dark' }} />
             ) : uploadState.error ? (
               <ErrorIcon color="error" sx={{ fontSize: 48 }} />
             ) : (
@@ -498,10 +504,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               variant="h6"
               color={
                 uploadState.success
-                  ? 'success.main'
+                  ? 'success.dark'
                   : uploadState.error
                     ? 'error.main'
-                    : 'text.primary'
+                    : dragActive
+                      ? 'text.secondary'
+                      : 'text.primary'
               }
               align="center"
             >
@@ -518,13 +526,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               <Box sx={{ textAlign: 'center' }}>
                 <Typography
                   variant="body2"
-                  color="text.secondary"
+                  color={dragActive ? 'text.secondary' : 'text.secondary'}
                   id="upload-instructions"
                   sx={{ mb: 1 }}
                 >
                   Drag and drop your CSV file here, or click to browse
                 </Typography>
-                <Typography variant="caption" color="text.disabled">
+                <Typography
+                  variant="caption"
+                  color={dragActive ? 'text.secondary' : 'text.disabled'}
+                >
                   Maximum file size: 50MB • Supported format: CSV
                   <br />
                   Required columns: order_date, qty, unit_price (or net_revenue)
@@ -608,40 +619,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     }
                   >
                     <CardContent sx={{ p: 2 }}>
-                      <Box sx={{ position: 'relative' }}>
-                        {/* Feature chips in top-right */}
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            right: 0,
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: 0.5,
-                            justifyContent: 'flex-end',
-                          }}
-                        >
-                          {dataset.features.slice(0, 2).map(feature => (
-                            <Chip
-                              key={feature}
-                              label={feature}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.7rem', height: 20 }}
-                            />
-                          ))}
-                          {dataset.features.length > 2 && (
-                            <Chip
-                              label={`+${dataset.features.length - 2} more`}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.7rem', height: 20 }}
-                            />
-                          )}
-                        </Box>
-
-                        {/* Main content area */}
-                        <Box sx={{ pr: 12 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          height: '100%',
+                        }}
+                      >
+                        {/* Left side - Content */}
+                        <Box sx={{ flex: 1, mr: 2 }}>
                           {/* Header with icon and title */}
                           <Box
                             sx={{
@@ -672,12 +659,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                           <Typography
                             variant="caption"
                             color="text.disabled"
-                            sx={{ mb: 2, display: 'block' }}
+                            sx={{ mb: 0, display: 'block' }}
                           >
                             {dataset.rows} rows • CSV format
                           </Typography>
+                        </Box>
 
-                          {/* Try Demo button in bottom-left */}
+                        {/* Right side - Action button */}
+                        <Box sx={{ flexShrink: 0 }}>
                           <Button
                             size="small"
                             startIcon={
