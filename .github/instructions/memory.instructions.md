@@ -37,3 +37,41 @@ applyTo: '**'
 **Vercel Deployment Fix**: **COMPLETE** - Resolved 413 Request Entity Too Large error by reducing file size limits from 50MB to 4MB and creating optimized sample data (ai-analyst-demo_orders_medium.csv, 3.9MB, 20K rows) that fits within Vercel's 4.5MB serverless function payload limit. Removed oversized files to prevent deployment issues.
 
 **Status**: **PRODUCTION READY** - Core functionality complete, follow-up conversations working, charts rendering with enhanced typography, comprehensive error handling implemented, Vercel deployment compatible.
+
+## Recent Session: Week 2 Semantic Layer Implementation
+
+**Context**: Building intelligent semantic query layer to reduce OpenAI API costs and improve performance through local processing of structured data queries.
+
+**Week 2 Progress**:
+
+**Task 2.1 - Intent Recognition System: ✅ COMPLETE**
+
+- **New**: `/src/lib/agents/utils/query-types.ts` - Complete type system with QueryType enum (8 types), QueryEntity, QueryIntent, QueryPattern, IntentClassificationResult interfaces
+- **New**: `/src/lib/agents/utils/intent-classifier.ts` - IntentClassifier class with pattern matching, entity extraction, confidence scoring for 8 query types (PROFILE, TREND, COMPARISON, AGGREGATION, FILTER, RELATIONSHIP, DISTRIBUTION, RANKING)
+- **New**: `/src/lib/agents/__tests__/intent-classifier.test.ts` - 18 comprehensive tests with 100% pass rate, >95% accuracy, <50ms processing time
+- **Features**: Priority-ordered regex patterns, entity-column matching, LLM routing decisions, cost estimation (1-10 scale), caching logic
+
+**Task 2.2 - Entity Extraction Enhancement: ✅ COMPLETE**
+
+- Enhanced entity extraction with column name matching using Levenshtein distance
+- Confidence scoring for entity-column mappings with 0.8+ threshold for high confidence
+- Measure/dimension/filter/time/limit classification from natural language
+- Performance optimization with <50ms processing time requirement
+
+**Task 2.3 - Query Pattern Matching: ✅ COMPLETE**
+
+- Implemented regex-based pattern matching with proper priority ordering
+- Fixed pattern specificity issues: aggregation/relationship patterns before comparison/profile
+- Comprehensive test coverage validating all 8 query types with edge cases
+- TypeScript strict mode compliance throughout codebase
+
+**Profile API Integration Test Fix: ✅ COMPLETE**
+
+- **Fixed**: `/src/lib/__tests__/profile-api-integration.test.ts` - Comprehensive mock infrastructure for telemetry, error handling, session management
+- **Resolved**: TypeScript interface mismatches for FileMetadata, DataProfile, QualityMetrics, DataInsights, PrecomputedAggregations
+- **Fixed**: Date serialization issues in JSON responses, AppError toErrorResponse method mocks
+- **Result**: 4/4 tests passing, all integration scenarios covered (successful profiling, error handling, agent reuse)
+
+**Current Task**: Task 2.4 - Execution Plan Generation (Query Planning Agent implementation)
+
+**Architecture Status**: Intent Recognition System fully operational, ready for Query Planning Agent integration. Profile API integration tests validate Week 1 Data Profiling Agent works correctly as foundation for semantic layer.

@@ -54,3 +54,5 @@ export {
 } from './types';
 
 export { DataProfilingAgent } from './profiling-agent';
+export { QueryPlannerAgent } from './query-planner-agent';
+export type { QueryPlannerInput } from './query-planner-agent';
