@@ -194,12 +194,15 @@ describe('QueryPlannerAgent', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('aggregation');
-      expect(queryIntent.entities.measures).toContain('revenue');
-      expect(queryIntent.entities.dimensions).toContain('category');
-      expect(queryIntent.operation.aggregation).toBe('sum');
-      expect(queryIntent.confidence).toBeGreaterThan(0);
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('aggregation');
+      expect(plannerResult.queryIntent.entities.measures).toContain('revenue');
+      expect(plannerResult.queryIntent.entities.dimensions).toContain(
+        'category'
+      );
+      expect(plannerResult.queryIntent.operation.aggregation).toBe('sum');
+      expect(plannerResult.queryIntent.confidence).toBeGreaterThan(0);
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle trend queries', async () => {
@@ -212,11 +215,12 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('trend');
-      expect(queryIntent.entities.measures).toContain('revenue');
-      expect(queryIntent.operation.aggregation).toBe('avg');
-      expect(queryIntent.visualization?.type).toBe('line');
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('trend');
+      expect(plannerResult.queryIntent.entities.measures).toContain('revenue');
+      expect(plannerResult.queryIntent.operation.aggregation).toBe('avg');
+      expect(plannerResult.queryIntent.visualization?.type).toBe('line');
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle comparison queries', async () => {
@@ -229,10 +233,11 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('comparison');
-      expect(queryIntent.entities.measures).toContain('revenue');
-      expect(queryIntent.visualization?.type).toBe('bar');
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('comparison');
+      expect(plannerResult.queryIntent.entities.measures).toContain('revenue');
+      expect(plannerResult.queryIntent.visualization?.type).toBe('bar');
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle profile queries', async () => {
@@ -245,10 +250,11 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('profile');
-      expect(queryIntent.operation.aggregation).toBe('count');
-      expect(queryIntent.visualization?.type).toBe('table');
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('profile');
+      expect(plannerResult.queryIntent.operation.aggregation).toBe('count');
+      expect(plannerResult.queryIntent.visualization?.type).toBe('table');
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle ranking queries as custom type', async () => {
@@ -261,11 +267,12 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('custom'); // Ranking maps to custom
-      expect(queryIntent.entities.measures).toContain('revenue');
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('custom'); // Ranking maps to custom
+      expect(plannerResult.queryIntent.entities.measures).toContain('revenue');
       // Check if dimensions are extracted - may be empty for ranking queries without explicit grouping
-      expect(queryIntent.entities.dimensions).toBeDefined();
+      expect(plannerResult.queryIntent.entities.dimensions).toBeDefined();
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle filter queries', async () => {
@@ -278,10 +285,11 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('filter');
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('filter');
       // Filter queries may not always extract filters correctly in this simple test
-      expect(queryIntent.entities).toBeDefined();
+      expect(plannerResult.queryIntent.entities).toBeDefined();
+      expect(plannerResult.executionPlan).toBeDefined();
     });
 
     it('should handle unknown/complex queries with low confidence', async () => {
@@ -295,9 +303,10 @@ describe('QueryPlannerAgent', () => {
 
       expect(result.success).toBe(true);
 
-      const queryIntent = result.data!;
-      expect(queryIntent.type).toBe('custom'); // Unknown maps to custom
-      expect(queryIntent.confidence).toBeLessThan(0.7); // Should have low confidence
+      const plannerResult = result.data!;
+      expect(plannerResult.queryIntent.type).toBe('custom'); // Unknown maps to custom
+      expect(plannerResult.queryIntent.confidence).toBeLessThan(0.7); // Should have low confidence
+      expect(plannerResult.executionPlan).toBeDefined();
     });
   });
 
@@ -309,10 +318,13 @@ describe('QueryPlannerAgent', () => {
       };
 
       const result = await agent.execute(input, mockContext);
-      const queryIntent = result.data!;
+      const plannerResult = result.data!;
 
-      // High confidence query should not fallback to LLM
-      expect(queryIntent.confidence).toBeGreaterThanOrEqual(0.5); // Adjusted for actual classifier behavior
+      // Query should be classified and have execution plan
+      expect(plannerResult.queryIntent.confidence).toBeGreaterThanOrEqual(0.5); // Adjusted for actual classifier behavior
+      expect(plannerResult.executionPlan).toBeDefined();
+      // With 0.5 confidence (below 0.7 threshold), it will fallback to LLM
+      expect(plannerResult.executionPlan.fallbackToLLM).toBe(true);
     });
 
     it('should suggest appropriate visualizations', async () => {
@@ -329,9 +341,11 @@ describe('QueryPlannerAgent', () => {
         };
 
         const result = await agent.execute(input, mockContext);
-        const queryIntent = result.data!;
+        const plannerResult = result.data!;
 
-        expect(queryIntent.visualization?.type).toBe(testCase.expectedViz);
+        expect(plannerResult.queryIntent.visualization?.type).toBe(
+          testCase.expectedViz
+        );
       }
     });
 
@@ -342,10 +356,12 @@ describe('QueryPlannerAgent', () => {
       };
 
       const result = await agent.execute(input, mockContext);
-      const queryIntent = result.data!;
+      const plannerResult = result.data!;
 
-      expect(queryIntent.entities.measures).toContain('revenue');
-      expect(queryIntent.entities.dimensions).toContain('category');
+      expect(plannerResult.queryIntent.entities.measures).toContain('revenue');
+      expect(plannerResult.queryIntent.entities.dimensions).toContain(
+        'category'
+      );
     });
   });
 

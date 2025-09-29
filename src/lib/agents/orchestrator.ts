@@ -17,6 +17,11 @@ import {
   QueryIntent,
   AgentError,
 } from './types';
+import {
+  SemanticExecutorAgent,
+  SemanticExecutorInput,
+} from './semantic-executor-agent';
+import { QueryPlannerResult } from './query-planner-agent';
 
 export interface UploadedFile {
   buffer: Buffer;
@@ -209,33 +214,96 @@ export class AgentOrchestrator {
     profile: DataProfile,
     context: AgentExecutionContext
   ): Promise<AnalysisResult> {
-    // This is a simplified implementation
-    // In reality, this would execute the query plan against the data
     const startTime = Date.now();
 
-    // Mock analysis result for now
+    // Get query planning agent to generate execution plan
+    const queryPlannerAgent = this.getAgent(AgentType.QUERY_PLANNING);
+    if (!queryPlannerAgent) {
+      throw new AgentError(
+        'Query planning agent not available for semantic execution',
+        AgentType.QUERY_PLANNING,
+        'AGENT_NOT_FOUND'
+      );
+    }
+
+    // Generate execution plan - Note: we're re-generating from the original query
+    // This is not ideal but works for now. In a real system, we'd pass the original query here
+    const planningResult = await queryPlannerAgent.execute(
+      { query: 'placeholder', profile }, // TODO: Pass original query through context
+      context
+    );
+
+    if (!planningResult.success) {
+      throw planningResult.error || new Error('Query planning failed');
+    }
+
+    const { queryIntent: resolvedIntent, executionPlan } =
+      planningResult.data as QueryPlannerResult;
+
+    // Get semantic executor agent
+    const semanticExecutorAgent = this.getAgent(AgentType.SEMANTIC_EXECUTOR);
+    if (!semanticExecutorAgent) {
+      throw new AgentError(
+        'Semantic executor agent not available',
+        AgentType.SEMANTIC_EXECUTOR,
+        'AGENT_NOT_FOUND'
+      );
+    }
+
+    // Execute semantic query
+    const executorInput: SemanticExecutorInput = {
+      queryIntent: resolvedIntent, // Use the resolved intent from planning
+      profile,
+      executionPlan,
+    };
+
+    const executionResult = await semanticExecutorAgent.execute(
+      executorInput,
+      context
+    );
+
+    if (!executionResult.success) {
+      throw executionResult.error || new Error('Semantic execution failed');
+    }
+
+    const semanticResult = executionResult.data as any; // SemanticExecutorResult
+
+    // Convert to AnalysisResult format
     const analysisResult: AnalysisResult = {
       id: `analysis-${Date.now()}`,
       query: `Semantic query for ${intent.type}`,
       intent,
-      executionPlan: {
-        id: `plan-${Date.now()}`,
-        steps: [],
-        estimatedTime: 100,
-        estimatedCost: 0.01,
-        fallbackToLLM: false,
-        optimizations: ['cache_hit', 'predicate_pushdown'],
-      },
-      data: [],
-      insights: [],
+      executionPlan: semanticResult.executionPlan,
+      data: semanticResult.processedData || [],
+      insights: [
+        ...semanticResult.insights.keyFindings.map((finding: string) => ({
+          type: 'insight' as const,
+          content: finding,
+          confidence: 0.9,
+        })),
+        ...semanticResult.insights.trends.map((trend: any) => ({
+          type: 'trend' as const,
+          content: `${trend.metric} is ${trend.direction} with ${trend.changePercent}% change`,
+          confidence: 0.8,
+        })),
+      ],
       metadata: {
-        executionTime: Date.now() - startTime,
-        dataPoints: 0,
+        executionTime: semanticResult.metadata.executionTime,
+        dataPoints: semanticResult.processedData?.length || 0,
         cacheHit: false,
-        agentPath: [AgentType.QUERY_PLANNING],
+        agentPath: [AgentType.QUERY_PLANNING, AgentType.SEMANTIC_EXECUTOR],
       },
-      suggestions: [],
+      suggestions: semanticResult.suggestions || [],
     };
+
+    this.logger.info(
+      `Semantic query execution completed in ${Date.now() - startTime}ms`,
+      {
+        queryType: intent.type,
+        dataPoints: analysisResult.metadata.dataPoints,
+        insights: analysisResult.insights.length,
+      }
+    );
 
     return analysisResult;
   }

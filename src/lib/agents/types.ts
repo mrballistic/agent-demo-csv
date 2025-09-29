@@ -3,6 +3,7 @@
 export enum AgentType {
   PROFILING = 'profiling',
   QUERY_PLANNING = 'query-planning',
+  SEMANTIC_EXECUTOR = 'semantic-executor',
   SECURITY = 'security',
   CHART = 'chart',
   CONVERSATION = 'conversation',

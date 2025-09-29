@@ -55,4 +55,13 @@ export {
 
 export { DataProfilingAgent } from './profiling-agent';
 export { QueryPlannerAgent } from './query-planner-agent';
-export type { QueryPlannerInput } from './query-planner-agent';
+export { SemanticExecutorAgent } from './semantic-executor-agent';
+
+export type {
+  QueryPlannerInput,
+  QueryPlannerResult,
+} from './query-planner-agent';
+export type {
+  SemanticExecutorInput,
+  SemanticExecutorResult,
+} from './semantic-executor-agent';

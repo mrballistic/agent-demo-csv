@@ -18,6 +18,11 @@ export interface QueryPlannerInput {
   profile: DataProfile;
 }
 
+export interface QueryPlannerResult {
+  queryIntent: QueryIntent;
+  executionPlan: ExecutionPlan;
+}
+
 /**
  * Query Planning Agent
  *
@@ -26,7 +31,7 @@ export interface QueryPlannerInput {
  */
 export class QueryPlannerAgent extends BaseAgent<
   QueryPlannerInput,
-  QueryIntent
+  QueryPlannerResult
 > {
   readonly type = AgentType.QUERY_PLANNING;
   readonly name = 'QueryPlannerAgent';
@@ -46,7 +51,7 @@ export class QueryPlannerAgent extends BaseAgent<
   protected async executeInternal(
     input: QueryPlannerInput,
     context: AgentExecutionContext
-  ): Promise<QueryIntent> {
+  ): Promise<QueryPlannerResult> {
     this.logger.info(`Planning query: "${input.query}"`);
 
     // Step 1: Classify the query intent
@@ -80,7 +85,10 @@ export class QueryPlannerAgent extends BaseAgent<
 
     this.logger.info(`Query planning completed`);
 
-    return queryIntent;
+    return {
+      queryIntent,
+      executionPlan,
+    };
   }
 
   /**
