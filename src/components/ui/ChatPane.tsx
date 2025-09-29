@@ -101,20 +101,17 @@ const ChatPane: React.FC<ChatPaneProps> = ({
   const sendFlushScheduledRef = useRef<number | null>(null);
   // EventSource connection is managed by useChat hook in parent component
 
-  // Hook-backed chat (tests mock this hook). If available, prefer hook values.
-  const chatHook = useChat({ threadId });
-  const hookMessages = React.useMemo(
-    () => (chatHook as any)?.messages ?? [],
-    [chatHook]
-  );
-  const hookIsLoading = (chatHook as any)?.isLoading;
-  const hookIsConnected = (chatHook as any)?.isConnected;
-  const hookIsRunning = (chatHook as any)?.isRunning;
-  const hookConnectionError = (chatHook as any)?.connectionError;
-  const hookError = (chatHook as any)?.error;
-  const hookSendMessage = (chatHook as any)?.sendMessage;
-  const hookCancelRun = (chatHook as any)?.cancelRun;
-  const hookClearMessages = (chatHook as any)?.clearMessages;
+  // Use props from parent instead of creating own hook instance
+  // This ensures consistency with the parent's chat state
+  const hookMessages = initialMessages;
+  const hookIsLoading = isLoading;
+  const hookIsConnected = isConnected;
+  const hookIsRunning = isRunning;
+  const hookConnectionError = connectionError;
+  const hookError = null;
+  const hookSendMessage = onSendMessage;
+  const hookCancelRun = onCancelRun;
+  const hookClearMessages = null;
 
   const effectiveIsLoading =
     typeof hookIsLoading !== 'undefined' ? hookIsLoading : isLoading;
@@ -129,6 +126,22 @@ const ChatPane: React.FC<ChatPaneProps> = ({
       : typeof hookConnectionError !== 'undefined'
         ? hookConnectionError
         : connectionError;
+
+  // Determine connection status display
+  const getConnectionStatus = () => {
+    if (!threadId) {
+      return { text: 'Idle', color: 'text.secondary' };
+    }
+    if (effectiveIsConnected) {
+      return { text: 'Connected', color: 'success.main' };
+    }
+    if (effectiveConnectionError) {
+      return { text: 'Error', color: 'error.main' };
+    }
+    return { text: 'Connecting...', color: 'warning.main' };
+  };
+
+  const connectionStatus = getConnectionStatus();
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback((smooth = true) => {
@@ -280,8 +293,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({
         } catch (e) {
           // ignore
         }
-      } else {
-        onSendMessage?.(toSend, fileId);
       }
 
       // Clear input (also update controlled state)
@@ -836,6 +847,33 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                 </Box>
               </Box>
             ))}
+            {/* Working animation for when analysis is running */}
+            {effectiveIsRunning && (
+              <Fade in={effectiveIsRunning}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    p: 2,
+                    bgcolor: 'action.hover',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <CircularProgress size={20} />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      AI is analyzing your data...
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">
+                      This may take a few moments
+                    </Typography>
+                  </Box>
+                </Box>
+              </Fade>
+            )}
           </Stack>
         )}
         {/* show a general analyzing indicator when loading so tests can find it */}
@@ -951,18 +989,18 @@ const ChatPane: React.FC<ChatPaneProps> = ({
               width: 8,
               height: 8,
               borderRadius: '50%',
-              bgcolor: effectiveIsConnected ? 'success.main' : 'error.main',
+              bgcolor: connectionStatus.color,
             }}
             aria-hidden="true"
           />
           <Typography
             variant="caption"
-            color="text.secondary"
+            color={connectionStatus.color}
             id="chat-input-help"
             role="status"
             aria-live="polite"
           >
-            {effectiveIsConnected ? 'Connected' : 'Disconnected'}
+            {connectionStatus.text}
           </Typography>
         </Box>
       </Box>
