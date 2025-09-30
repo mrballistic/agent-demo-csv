@@ -1,5 +1,30 @@
+/**
+ * @fileoverview Next.js Middleware - CORS and security headers for API routes
+ *
+ * Configures Cross-Origin Resource Sharing (CORS) and security headers
+ * for all API endpoints, handling preflight requests and development mode.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Next.js middleware function that applies CORS and security headers to API routes
+ *
+ * Features:
+ * - CORS configuration with allowed origins
+ * - Preflight request handling
+ * - Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+ * - Development mode allowances
+ *
+ * @param request - The incoming NextRequest
+ * @returns NextResponse with appropriate headers
+ *
+ * @example
+ * ```typescript
+ * // This middleware automatically runs for all /api/* routes
+ * // No manual invocation needed
+ * ```
+ */
 export function middleware(request: NextRequest) {
   // Apply CORS headers to API routes
   if (request.nextUrl.pathname.startsWith('/api/')) {

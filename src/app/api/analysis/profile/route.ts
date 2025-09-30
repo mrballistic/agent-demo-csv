@@ -1,3 +1,8 @@
+/**
+ * Data profiling API endpoint
+ * @fileoverview Provides automated CSV analysis and data profiling capabilities
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
@@ -19,11 +24,40 @@ import {
 
 export const runtime = 'nodejs';
 
+/**
+ * Request body for data profiling
+ */
 interface ProfileRequest {
+  /** ID of the uploaded file to profile */
   fileId: string;
+  /** Optional session ID for context */
   sessionId?: string;
 }
 
+/**
+ * POST /api/analysis/profile - Analyze and profile uploaded CSV data
+ *
+ * This endpoint performs comprehensive analysis of uploaded CSV files including:
+ * - Column type detection and statistics
+ * - Data quality assessment
+ * - PII detection and security warnings
+ * - Sample data extraction
+ * - Missing value analysis
+ * - Data distribution insights
+ *
+ * @param request - Next.js request object containing ProfileRequest body
+ * @returns JSON response with complete data profile or error details
+ *
+ * @example
+ * ```javascript
+ * const response = await fetch('/api/analysis/profile', {
+ *   method: 'POST',
+ *   headers: { 'Content-Type': 'application/json' },
+ *   body: JSON.stringify({ fileId: 'file_123' })
+ * });
+ * const profile = await response.json();
+ * ```
+ */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let currentSessionId: string | undefined;

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * FileUploader component for CSV file upload and data profiling
+ * @fileoverview Provides drag-and-drop file upload with real-time progress tracking, validation, and automatic data profiling
+ */
+
 import React, { useCallback, useState, useRef } from 'react';
 import {
   Box,
@@ -37,14 +42,25 @@ import {
 } from '@mui/icons-material';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 
+/**
+ * Result object returned after successful file upload
+ */
 interface FileUploadResult {
+  /** Unique identifier for the uploaded file */
   fileId: string;
+  /** Original filename */
   filename: string;
+  /** File size in bytes */
   size: number;
+  /** Number of data rows detected */
   rowCount: number;
+  /** Basic profiling hints from initial file analysis */
   profileHints: {
+    /** Number of columns detected */
     columnCount: number;
+    /** Whether the file appears to have header row */
     hasHeaders: boolean;
+    /** Sample of the first few rows */
     sampleData: string[][];
   };
 }
@@ -92,23 +108,68 @@ interface DataProfile {
   };
 }
 
+/**
+ * Props for the FileUploader component
+ */
 interface FileUploaderProps {
+  /** Callback fired when file is successfully uploaded and processed */
   onFileUploaded: (result: FileUploadResult) => void;
+  /** Callback for system messages (status updates, errors) */
   onSystemMessage: (message: string) => void;
+  /** Whether the uploader is disabled */
   disabled?: boolean;
+  /** Additional CSS class name */
   className?: string;
+  /** Whether to show sample data after upload */
   showSampleData?: boolean;
 }
 
+/**
+ * Internal state for tracking upload progress and status
+ */
 interface UploadState {
+  /** Whether upload is currently in progress */
   isUploading: boolean;
+  /** Upload progress percentage (0-100) */
   progress: number;
+  /** Error message if upload failed */
   error: string | null;
+  /** Whether upload completed successfully */
   success: boolean;
+  /** Whether data profiling is in progress */
   isProfileLoading: boolean;
+  /** Complete data profile result */
   profile: DataProfile | null;
 }
 
+/**
+ * FileUploader component for CSV file upload with drag-and-drop support
+ *
+ * A comprehensive file upload component that provides:
+ * - Drag-and-drop file upload interface
+ * - Progress tracking with visual feedback
+ * - File validation (format, size limits)
+ * - Automatic data profiling after upload
+ * - Sample data preview
+ * - Error handling and user feedback
+ * - Accessibility support with screen reader announcements
+ * - Security warnings for PII detection
+ *
+ * @param props - Component properties
+ * @returns JSX element for the file uploader interface
+ *
+ * @example
+ * ```tsx
+ * <FileUploader
+ *   onFileUploaded={(result) => {
+ *     console.log('File uploaded:', result.filename);
+ *   }}
+ *   onSystemMessage={(msg) => console.log(msg)}
+ *   disabled={false}
+ *   showSampleData={true}
+ * />
+ * ```
+ */
 const FileUploader: React.FC<FileUploaderProps> = ({
   onFileUploaded,
   onSystemMessage,

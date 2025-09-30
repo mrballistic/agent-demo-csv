@@ -1,7 +1,17 @@
+/**
+ * @fileoverview Storage Manager - Unified interface for session and file storage
+ *
+ * Provides a centralized API for managing sessions and files, coordinating between
+ * the session store and file store to provide atomic operations and cleanup.
+ */
+
 import crypto from 'crypto';
 import { sessionStore, SessionData } from './session-store';
 import { fileStore, FileMetadata } from './file-store';
 
+/**
+ * Statistics about current storage usage
+ */
 export interface StorageStats {
   sessions: {
     active: number;
@@ -15,6 +25,15 @@ export interface StorageStats {
   };
 }
 
+/**
+ * Unified storage interface for sessions and files
+ *
+ * Coordinates between session store and file store to provide:
+ * - Session lifecycle management
+ * - File upload and storage
+ * - Storage statistics and cleanup
+ * - Atomic operations across stores
+ */
 export class StorageManager {
   /**
    * Create a new session with thread ID

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * Main application page for the AI Data Analyst Demo
+ * @fileoverview Primary application interface coordinating file upload, chat interactions, and data analysis
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import {
   ChatPane,
@@ -37,6 +42,24 @@ import {
 } from '@mui/icons-material';
 import { ChatMessage, ArtifactItem } from '@/types';
 
+/**
+ * Main application page component
+ *
+ * This is the primary interface for the AI Data Analyst application, providing:
+ * - File upload interface with drag-and-drop support
+ * - Real-time chat interface for data analysis questions
+ * - Quick action buttons for common analysis tasks
+ * - Artifacts panel for generated charts and exports
+ * - Security warnings and PII detection alerts
+ * - Progress tracking and queue management
+ * - Responsive design for mobile and desktop
+ *
+ * The component manages the complete user workflow from file upload through
+ * analysis and export, coordinating between the semantic layer and LLM-based
+ * conversation system.
+ *
+ * @returns The main application interface
+ */
 export default function Home() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [hasUploadedFile, setHasUploadedFile] = useState(false);

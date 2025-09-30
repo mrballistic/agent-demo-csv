@@ -1,5 +1,15 @@
+/**
+ * @fileoverview Session Store - In-memory session management with TTL cleanup
+ *
+ * Manages user sessions with automatic cleanup, metrics tracking, and
+ * storage for uploaded files, data profiles, messages, and artifacts.
+ */
+
 import crypto from 'crypto';
 
+/**
+ * Complete session data structure
+ */
 export interface SessionData {
   id: string;
   threadId: string;
@@ -35,6 +45,25 @@ export interface SessionData {
   }>;
 }
 
+/**
+ * In-memory session store with automatic TTL-based cleanup
+ *
+ * Features:
+ * - Session creation and retrieval by ID or thread ID
+ * - Automatic session expiration (24 hour TTL)
+ * - Activity tracking and metrics collection
+ * - File upload and artifact association
+ * - Message history storage
+ * - Background cleanup process
+ *
+ * @example
+ * ```typescript
+ * const session = sessionStore.createSession('thread-123');
+ * sessionStore.updateSession(session.id, {
+ *   metrics: { uploadsCount: 1 }
+ * });
+ * ```
+ */
 export class SessionStore {
   private sessions = new Map<string, SessionData>();
   private readonly TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds

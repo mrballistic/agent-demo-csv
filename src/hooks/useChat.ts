@@ -1,27 +1,52 @@
 'use client';
 
+/**
+ * Chat management hook for real-time conversations
+ * @fileoverview React hook providing chat functionality with Server-Sent Events, message streaming, and analysis coordination
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChatMessage } from '@/types';
 
+/**
+ * Server-sent event structure for real-time updates
+ */
 interface StreamEvent {
+  /** Event type identifier */
   type: string;
+  /** Event payload data */
   data: any;
+  /** Unix timestamp when event occurred */
   timestamp: number;
 }
 
+/**
+ * Configuration options for the chat hook
+ */
 interface UseChatOptions {
+  /** Thread ID for the conversation */
   threadId?: string | undefined;
+  /** Callback when an artifact (chart/export) is created */
   onArtifactCreated?: (artifact: any) => void;
+  /** Callback when analysis run status changes */
   onRunStatusChange?: (
     status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   ) => void;
+  /** Callback for queue position updates */
   onQueueUpdate?: (position?: number, estimatedWaitTime?: number) => void;
 }
 
+/**
+ * Return value from the chat hook
+ */
 interface UseChatReturn {
+  /** Array of chat messages */
   messages: ChatMessage[];
+  /** Whether SSE connection is active */
   isConnected: boolean;
+  /** Whether analysis is currently running */
   isRunning: boolean;
+  /** Current status of analysis run */
   runStatus:
     | 'idle'
     | 'queued'
@@ -29,14 +54,56 @@ interface UseChatReturn {
     | 'completed'
     | 'failed'
     | 'cancelled';
+  /** Error message if connection failed */
   connectionError: string | null;
+  /** Send a message to the analysis system */
   sendMessage: (content: string, fileId?: string | null) => Promise<void>;
+  /** Cancel the currently running analysis */
   cancelRun: () => Promise<void>;
+  /** Clear all messages from the chat */
   clearMessages: () => void;
+  /** Add a message programmatically */
   addMessage: (message: ChatMessage) => void;
+  /** Reset the SSE connection */
   resetConnection: () => void;
 }
 
+/**
+ * React hook for managing chat conversations with real-time streaming
+ *
+ * This hook provides a complete chat interface with Server-Sent Events for real-time
+ * message streaming, analysis progress tracking, and artifact management. It handles:
+ *
+ * - Real-time message streaming via SSE
+ * - Connection state management with automatic reconnection
+ * - Analysis run lifecycle (queued → running → completed)
+ * - Queue position and wait time tracking
+ * - Error handling and retry logic
+ * - Message persistence and state management
+ * - Artifact creation notifications
+ *
+ * @param options - Configuration options for the chat hook
+ * @returns Chat state and control functions
+ *
+ * @example
+ * ```tsx
+ * const {
+ *   messages,
+ *   isConnected,
+ *   isRunning,
+ *   sendMessage,
+ *   cancelRun
+ * } = useChat({
+ *   threadId: 'thread_123',
+ *   onArtifactCreated: (artifact) => {
+ *     console.log('Chart created:', artifact.url);
+ *   }
+ * });
+ *
+ * // Send a message
+ * await sendMessage('Show me sales trends', fileId);
+ * ```
+ */
 export function useChat({
   threadId,
   onArtifactCreated,

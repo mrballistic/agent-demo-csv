@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * @fileoverview Theme Provider - Material-UI theme configuration with system theme detection
+ *
+ * Provides a centralized theme provider that automatically detects and follows
+ * the user's system color scheme preference (light/dark mode).
+ */
+
 import {
   createTheme,
   ThemeProvider as MuiThemeProvider,
@@ -7,10 +14,34 @@ import {
 import CssBaseline from '@mui/material/CssBaseline';
 import { ReactNode, useEffect, useState } from 'react';
 
+/**
+ * Props for the ThemeProvider component
+ */
 interface ThemeProviderProps {
+  /** Child components to wrap with theme provider */
   children: ReactNode;
 }
 
+/**
+ * Theme Provider component that wraps the application with Material-UI theme
+ *
+ * Features:
+ * - Automatic system theme detection (light/dark)
+ * - Hydration-safe theme switching
+ * - Custom color palette and component overrides
+ * - CssBaseline for consistent styling
+ *
+ * @param props - Component props
+ * @param props.children - Child components to wrap with theme
+ * @returns Themed component tree
+ *
+ * @example
+ * ```tsx
+ * <ThemeProvider>
+ *   <App />
+ * </ThemeProvider>
+ * ```
+ */
 export default function ThemeProvider({ children }: ThemeProviderProps) {
   // Use a more reliable detection method
   const [effectiveDark, setEffectiveDark] = useState<boolean>(() => {

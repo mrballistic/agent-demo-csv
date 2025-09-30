@@ -1,3 +1,10 @@
+/**
+ * @fileoverview File Upload API - Secure CSV file upload with PII detection
+ *
+ * Handles CSV file uploads with comprehensive validation, PII detection,
+ * and metadata extraction. Provides secure file storage and profiling hints.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { fileStore } from '@/lib/file-store';
@@ -16,6 +23,9 @@ export const runtime = 'nodejs';
 // File validation schema
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+/**
+ * PII flags for columns with detected personally identifiable information
+ */
 interface PIIFlags {
   [columnName: string]: {
     isPII: boolean;
@@ -24,19 +34,35 @@ interface PIIFlags {
   };
 }
 
+/**
+ * Metadata extracted from uploaded CSV files
+ */
 interface FileMetadata {
+  /** Unique identifier for the uploaded file */
   fileId: string;
+  /** Original filename */
   filename: string;
+  /** File size in bytes */
   size: number;
+  /** SHA-256 checksum for integrity validation */
   checksum: string;
+  /** Detected character encoding */
   encoding: string;
+  /** CSV delimiter character */
   delimiter: string;
+  /** Total number of data rows */
   rowCount: number;
+  /** Number of rows used for sniffing/sampling */
   sniffRows: number;
+  /** PII detection results per column */
   piiFlags: PIIFlags;
+  /** Hints for data profiling */
   profileHints: {
+    /** Number of columns detected */
     columnCount: number;
+    /** Whether the file has header row */
     hasHeaders: boolean;
+    /** Sample data for preview */
     sampleData: string[][];
   };
 }

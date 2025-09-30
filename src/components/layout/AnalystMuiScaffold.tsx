@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * @fileoverview Analyst MUI Scaffold - Main application layout with sidebar and navigation
+ *
+ * Provides the core Material-UI layout structure with responsive design,
+ * including app bar, collapsible sidebar, and main content area.
+ */
+
 import {
   AppBar,
   Box,
@@ -17,13 +24,38 @@ import {
 import { ReactNode, useState } from 'react';
 import { KeyboardNavigation } from '@/lib/accessibility';
 
+/**
+ * Props for the AnalystMuiScaffold component
+ */
 interface AnalystMuiScaffoldProps {
+  /** Child components to render in the main content area */
   children: ReactNode;
 }
 
 const DRAWER_WIDTH = 320;
 const APP_BAR_HEIGHT = 64;
 
+/**
+ * Main application layout scaffold with Material-UI components
+ *
+ * Features:
+ * - Responsive design with mobile-first approach
+ * - Collapsible artifacts sidebar
+ * - Fixed app bar with navigation
+ * - Accessibility support with ARIA labels
+ * - Keyboard navigation integration
+ *
+ * @param props - Component props
+ * @param props.children - Main content to render
+ * @returns Complete application layout
+ *
+ * @example
+ * ```tsx
+ * <AnalystMuiScaffold>
+ *   <MainContent />
+ * </AnalystMuiScaffold>
+ * ```
+ */
 export default function AnalystMuiScaffold({
   children,
 }: AnalystMuiScaffoldProps) {

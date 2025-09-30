@@ -1,28 +1,69 @@
+/**
+ * File storage system for the AI Data Analyst application
+ * @fileoverview Provides secure file storage with automatic cleanup, versioning, and integrity checks
+ */
+
 import fs from 'fs/promises';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { existsSync } from 'fs';
 
+/**
+ * Metadata interface for stored files
+ * Contains all necessary information to track and manage stored files
+ */
 export interface FileMetadata {
+  /** Unique identifier for the file */
   id: string;
+  /** Session ID that owns this file */
   sessionId: string;
+  /** Final filename used for storage (may include timestamp) */
   filename: string;
+  /** Original filename provided by user */
   originalName: string;
+  /** File size in bytes */
   size: number;
+  /** SHA-256 checksum for integrity verification */
   checksum: string;
+  /** MIME type of the file */
   mimeType: string;
+  /** Unix timestamp when file was created */
   createdAt: number;
+  /** Unix timestamp when file expires */
   expiresAt: number;
+  /** Full filesystem path to the stored file */
   filePath: string;
 }
 
+/**
+ * Secure file storage system with automatic cleanup and versioning
+ *
+ * Features:
+ * - Automatic file expiration (24 hour TTL)
+ * - SHA-256 integrity checking
+ * - Session-based organization
+ * - Artifact versioning
+ * - Cross-process metadata persistence
+ * - Automatic cleanup of expired files
+ *
+ * @example
+ * ```typescript
+ * const store = new FileStore('/path/to/storage');
+ * const metadata = await store.storeFile('session123', 'data.csv', buffer, 'text/csv');
+ * const content = await store.getFile(metadata.id);
+ * ```
+ */
 export class FileStore {
   private files = new Map<string, FileMetadata>();
   private readonly baseDir: string;
   private readonly TTL = 24 * 60 * 60 * 1000; // 24 hours
   private cleanupInterval: NodeJS.Timeout;
 
+  /**
+   * Creates a new FileStore instance
+   * @param baseDir - Base directory for file storage (defaults to '/tmp/analyst-demo')
+   */
   constructor(baseDir: string = '/tmp/analyst-demo') {
     this.baseDir = baseDir;
 

@@ -1,3 +1,8 @@
+/**
+ * Agent orchestration system for the AI Data Analyst
+ * @fileoverview Central coordinator for managing agent interactions, execution pipelines, and semantic query processing
+ */
+
 import {
   Agent,
   BaseAgent,
@@ -24,15 +29,55 @@ import {
 import { QueryPlannerResult } from './query-planner-agent';
 import { ConversationOutput } from './conversation-agent';
 
+/**
+ * Represents an uploaded file with its metadata
+ */
 export interface UploadedFile {
+  /** File content as Buffer */
   buffer: Buffer;
+  /** Original filename */
   name: string;
+  /** MIME type of the file */
   mimeType: string;
+  /** File size in bytes */
   size: number;
 }
 
 /**
- * Central orchestrator for coordinating agent interactions
+ * Central orchestrator for coordinating agent interactions and managing analysis pipelines
+ *
+ * The AgentOrchestrator serves as the primary coordination layer for all agent-based operations
+ * in the AI Data Analyst system. It manages agent registration, message routing, execution
+ * contexts, and provides high-level APIs for data processing workflows.
+ *
+ * Key responsibilities:
+ * - Agent lifecycle management (register/unregister)
+ * - Message queue processing and routing
+ * - Execution context management with timeout handling
+ * - Data profiling pipeline coordination
+ * - Semantic query processing with fallback to LLM
+ * - Health monitoring and error handling
+ *
+ * @example
+ * ```typescript
+ * const orchestrator = new AgentOrchestrator();
+ * orchestrator.registerAgent(new ProfilingAgent());
+ * orchestrator.registerAgent(new QueryPlannerAgent());
+ *
+ * // Process uploaded file
+ * const profile = await orchestrator.processDataUpload({
+ *   buffer: csvBuffer,
+ *   name: 'data.csv',
+ *   mimeType: 'text/csv',
+ *   size: csvBuffer.length
+ * });
+ *
+ * // Execute semantic query
+ * const result = await orchestrator.executeSemanticQuery(
+ *   'Show me total sales by month',
+ *   profile
+ * );
+ * ```
  */
 export class AgentOrchestrator {
   private agents = new Map<AgentType, Agent>();
