@@ -162,35 +162,41 @@ export class AgentOrchestrator {
       return this.executeWithConversationAgent(query, profile, context);
     }
 
-    // Parse query intent
-    const intentResult = await queryAgent.execute({ query, profile }, context);
-    if (!intentResult.success) {
+    // Parse query intent and generate execution plan
+    const planningResult = await queryAgent.execute(
+      { query, profile },
+      context
+    );
+    if (!planningResult.success) {
       // Fallback to conversation agent
       return this.executeWithConversationAgent(query, profile, context);
     }
 
-    const intent = intentResult.data as QueryIntent;
+    const { queryIntent, executionPlan } =
+      planningResult.data as QueryPlannerResult;
 
     // Check if we can handle this semantically or need LLM
-    if (intent.confidence < 0.7) {
+    if (queryIntent.confidence < 0.7) {
       this.logger.info('Low confidence in query parsing, falling back to LLM');
       return this.executeWithConversationAgent(query, profile, context);
     }
 
-    // Execute semantic query
+    // Execute semantic query with the planning results
     const analysisResult = await this.executeSemanticQuery(
-      intent,
+      query,
+      queryIntent,
+      executionPlan,
       profile,
       context
     );
 
     // Generate chart if visualization is requested
-    if (intent.visualization) {
+    if (queryIntent.visualization) {
       const chartAgent = this.getAgent(AgentType.CHART);
       if (chartAgent) {
         try {
           const chartResult = await chartAgent.execute(
-            { data: analysisResult.data, config: intent.visualization },
+            { data: analysisResult.data, config: queryIntent.visualization },
             context
           );
           if (chartResult.success) {
@@ -210,35 +216,17 @@ export class AgentOrchestrator {
    * Execute query using semantic layer (without LLM)
    */
   private async executeSemanticQuery(
-    intent: QueryIntent,
+    originalQuery: string,
+    queryIntent: QueryIntent,
+    executionPlan: any, // ExecutionPlan type
     profile: DataProfile,
     context: AgentExecutionContext
   ): Promise<AnalysisResult> {
     const startTime = Date.now();
 
-    // Get query planning agent to generate execution plan
-    const queryPlannerAgent = this.getAgent(AgentType.QUERY_PLANNING);
-    if (!queryPlannerAgent) {
-      throw new AgentError(
-        'Query planning agent not available for semantic execution',
-        AgentType.QUERY_PLANNING,
-        'AGENT_NOT_FOUND'
-      );
-    }
-
-    // Generate execution plan - Note: we're re-generating from the original query
-    // This is not ideal but works for now. In a real system, we'd pass the original query here
-    const planningResult = await queryPlannerAgent.execute(
-      { query: 'placeholder', profile }, // TODO: Pass original query through context
-      context
+    this.logger.info(
+      `Executing semantic query: "${originalQuery}" (type: ${queryIntent.type}, confidence: ${queryIntent.confidence})`
     );
-
-    if (!planningResult.success) {
-      throw planningResult.error || new Error('Query planning failed');
-    }
-
-    const { queryIntent: resolvedIntent, executionPlan } =
-      planningResult.data as QueryPlannerResult;
 
     // Get semantic executor agent
     const semanticExecutorAgent = this.getAgent(AgentType.SEMANTIC_EXECUTOR);
@@ -250,9 +238,9 @@ export class AgentOrchestrator {
       );
     }
 
-    // Execute semantic query
+    // Execute semantic query with the already generated plan
     const executorInput: SemanticExecutorInput = {
-      queryIntent: resolvedIntent, // Use the resolved intent from planning
+      queryIntent,
       profile,
       executionPlan,
     };
@@ -271,17 +259,19 @@ export class AgentOrchestrator {
     // Convert to AnalysisResult format
     const analysisResult: AnalysisResult = {
       id: `analysis-${Date.now()}`,
-      query: `Semantic query for ${intent.type}`,
-      intent,
-      executionPlan: semanticResult.executionPlan,
-      data: semanticResult.processedData || [],
+      query: originalQuery,
+      intent: queryIntent,
+      executionPlan,
+      data: semanticResult.data || [],
       insights: [
-        ...semanticResult.insights.keyFindings.map((finding: string) => ({
-          type: 'insight' as const,
-          content: finding,
-          confidence: 0.9,
-        })),
-        ...semanticResult.insights.trends.map((trend: any) => ({
+        ...(semanticResult.insights.keyFindings || []).map(
+          (finding: string) => ({
+            type: 'insight' as const,
+            content: finding,
+            confidence: 0.9,
+          })
+        ),
+        ...(semanticResult.insights.trends || []).map((trend: any) => ({
           type: 'trend' as const,
           content: `${trend.metric} is ${trend.direction} with ${trend.changePercent}% change`,
           confidence: 0.8,
@@ -289,7 +279,8 @@ export class AgentOrchestrator {
       ],
       metadata: {
         executionTime: semanticResult.metadata.executionTime,
-        dataPoints: semanticResult.processedData?.length || 0,
+        dataPoints:
+          semanticResult.data?.length || profile.sampleData?.length || 0,
         cacheHit: false,
         agentPath: [AgentType.QUERY_PLANNING, AgentType.SEMANTIC_EXECUTOR],
       },
@@ -299,9 +290,10 @@ export class AgentOrchestrator {
     this.logger.info(
       `Semantic query execution completed in ${Date.now() - startTime}ms`,
       {
-        queryType: intent.type,
+        queryType: queryIntent.type,
         dataPoints: analysisResult.metadata.dataPoints,
         insights: analysisResult.insights.length,
+        fallbackToLLM: executionPlan.fallbackToLLM,
       }
     );
 
