@@ -97,7 +97,15 @@ export async function POST(request: NextRequest) {
         endpoint: '/api/analysis/query',
       });
 
-      return NextResponse.json(error.toErrorResponse(), { status: 404 });
+      return NextResponse.json(error.toErrorResponse(), {
+        status: 404,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      });
     }
 
     sessionId = session.id;
@@ -137,6 +145,10 @@ export async function POST(request: NextRequest) {
         status: 429,
         headers: {
           'Retry-After': (queueResult.retryAfter || 60).toString(),
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
         },
       });
     }
@@ -199,7 +211,15 @@ export async function POST(request: NextRequest) {
         [] // fileIds will be available after run completes
       );
 
-      return NextResponse.json(result);
+      return NextResponse.json(result, {
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      });
     } catch (error) {
       console.error('Analysis query failed:', error);
 
@@ -232,7 +252,15 @@ export async function POST(request: NextRequest) {
         undefined // No runId available in error case
       );
 
-      return NextResponse.json(appError.toErrorResponse(), { status: 500 });
+      return NextResponse.json(appError.toErrorResponse(), {
+        status: 500,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      });
     }
   } catch (error) {
     console.error('Request parsing failed:', error);
@@ -259,7 +287,15 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    return NextResponse.json(appError.toErrorResponse(), { status: 400 });
+    return NextResponse.json(appError.toErrorResponse(), {
+      status: 400,
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    });
   }
 }
 

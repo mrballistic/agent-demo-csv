@@ -8,3 +8,4 @@ export { ObservabilityDashboard } from './ObservabilityDashboard';
 export { default as DataDeletionDialog } from './DataDeletionDialog';
 export { default as ErrorRecovery } from './ErrorRecovery';
 export { default as HelpText } from './HelpText';
+export { default as SecurityWarnings } from './SecurityWarnings';

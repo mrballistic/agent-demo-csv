@@ -49,6 +49,49 @@ interface FileUploadResult {
   };
 }
 
+interface DataProfile {
+  id: string;
+  metadata: {
+    filename: string;
+    size: number;
+    rowCount: number;
+    columnCount: number;
+    processingTime: number;
+  };
+  schema: {
+    columns: Array<{
+      name: string;
+      type: string;
+      unique: boolean;
+      nullable: boolean;
+      qualityFlags: string[];
+      sampleValues: string[];
+      statistics?: any;
+    }>;
+  };
+  quality: {
+    overall: number;
+    dimensions: {
+      completeness: number;
+      consistency: number;
+      accuracy: number;
+      uniqueness: number;
+      validity: number;
+    };
+    issues: string[];
+  };
+  insights: {
+    keyFindings: string[];
+    recommendations: string[];
+    suggestedQueries: string[];
+  };
+  security: {
+    piiColumns: string[];
+    riskLevel: string;
+    recommendations: string[];
+  };
+}
+
 interface FileUploaderProps {
   onFileUploaded: (result: FileUploadResult) => void;
   onSystemMessage: (message: string) => void;
@@ -62,6 +105,8 @@ interface UploadState {
   progress: number;
   error: string | null;
   success: boolean;
+  isProfileLoading: boolean;
+  profile: DataProfile | null;
 }
 
 const FileUploader: React.FC<FileUploaderProps> = ({
@@ -76,6 +121,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     progress: 0,
     error: null,
     success: false,
+    isProfileLoading: false,
+    profile: null,
   });
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -88,6 +135,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       progress: 0,
       error: null,
       success: false,
+      isProfileLoading: false,
+      profile: null,
     });
     setSelectedFile(null);
   }, []);
@@ -136,6 +185,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         progress: 0,
         error: null,
         success: false,
+        isProfileLoading: false,
+        profile: null,
       });
 
       try {
@@ -169,6 +220,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           progress: 100,
           error: null,
           success: true,
+          isProfileLoading: true,
+          profile: null,
         });
 
         // Post system message
@@ -185,10 +238,38 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         // Call success callback
         onFileUploaded(result);
 
+        // Now fetch the data profile
+        try {
+          const profileResponse = await fetch('/api/analysis/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileId: result.fileId }),
+          });
+
+          if (profileResponse.ok) {
+            const profileResult = await profileResponse.json();
+            if (profileResult.success && profileResult.data.profile) {
+              setUploadState(prev => ({
+                ...prev,
+                isProfileLoading: false,
+                profile: profileResult.data.profile,
+              }));
+            }
+          }
+        } catch (profileError) {
+          console.warn('Failed to fetch data profile:', profileError);
+          setUploadState(prev => ({
+            ...prev,
+            isProfileLoading: false,
+          }));
+        }
+
         // Collapse uploader after a short delay (but keep success state)
         setTimeout(() => {
           setExpanded(false);
-        }, 2000);
+        }, 3000);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Upload failed';
@@ -197,6 +278,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           progress: 0,
           error: errorMessage,
           success: false,
+          isProfileLoading: false,
+          profile: null,
         });
 
         // Announce error to screen readers
@@ -302,6 +385,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             progress: 0,
             error: validationError,
             success: false,
+            isProfileLoading: false,
+            profile: null,
           });
           return;
         }
@@ -312,6 +397,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           progress: 0,
           error: null,
           success: false,
+          isProfileLoading: false,
+          profile: null,
         });
 
         // Simulate progress for demo effect
@@ -344,6 +431,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           progress: 100,
           error: null,
           success: true,
+          isProfileLoading: true,
+          profile: null,
         });
 
         // Post system message
@@ -360,10 +449,38 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         // Call success callback
         onFileUploaded(result);
 
+        // Now fetch the data profile
+        try {
+          const profileResponse = await fetch('/api/analysis/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileId: result.fileId }),
+          });
+
+          if (profileResponse.ok) {
+            const profileResult = await profileResponse.json();
+            if (profileResult.success && profileResult.data.profile) {
+              setUploadState(prev => ({
+                ...prev,
+                isProfileLoading: false,
+                profile: profileResult.data.profile,
+              }));
+            }
+          }
+        } catch (profileError) {
+          console.warn('Failed to fetch data profile:', profileError);
+          setUploadState(prev => ({
+            ...prev,
+            isProfileLoading: false,
+          }));
+        }
+
         // Collapse uploader after a short delay (but keep success state)
         setTimeout(() => {
           setExpanded(false);
-        }, 1500);
+        }, 3000);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Failed to load sample data';
@@ -372,6 +489,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           progress: 0,
           error: errorMessage,
           success: false,
+          isProfileLoading: false,
+          profile: null,
         });
 
         // Announce error to screen readers
@@ -709,6 +828,374 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             </Box>
           </Box>
         )}
+
+        {/* Data Profile Display */}
+        {uploadState.success &&
+          (uploadState.isProfileLoading || uploadState.profile) && (
+            <Box sx={{ mt: 3 }}>
+              <Divider sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Data Profile Analysis
+                </Typography>
+              </Divider>
+
+              {uploadState.isProfileLoading ? (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    py: 4,
+                  }}
+                >
+                  <CircularProgress size={24} sx={{ mr: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Analyzing data structure and quality...
+                  </Typography>
+                </Box>
+              ) : uploadState.profile ? (
+                <Grid container spacing={2}>
+                  {/* Overview Card */}
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography
+                          variant="subtitle2"
+                          gutterBottom
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                        >
+                          <DataObject color="primary" fontSize="small" />
+                          Dataset Overview
+                        </Typography>
+                        <Stack spacing={1}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Rows:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {uploadState.profile.metadata.rowCount.toLocaleString()}
+                            </Typography>
+                          </Box>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Columns:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {uploadState.profile.metadata.columnCount}
+                            </Typography>
+                          </Box>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Processing Time:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {uploadState.profile.metadata.processingTime}ms
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Quality Score Card */}
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography
+                          variant="subtitle2"
+                          gutterBottom
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                        >
+                          <CheckCircle color="success" fontSize="small" />
+                          Data Quality Score
+                        </Typography>
+                        <Box
+                          sx={{ display: 'flex', alignItems: 'center', mb: 2 }}
+                        >
+                          <Typography
+                            variant="h4"
+                            color="success.main"
+                            fontWeight="bold"
+                          >
+                            {uploadState.profile.quality.overall}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ ml: 1 }}
+                          >
+                            / 100
+                          </Typography>
+                        </Box>
+                        <Stack spacing={1}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Completeness:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {
+                                uploadState.profile.quality.dimensions
+                                  .completeness
+                              }
+                              %
+                            </Typography>
+                          </Box>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Consistency:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {
+                                uploadState.profile.quality.dimensions
+                                  .consistency
+                              }
+                              %
+                            </Typography>
+                          </Box>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Accuracy:
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {uploadState.profile.quality.dimensions.accuracy}%
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Column Analysis */}
+                  <Grid item xs={12}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography
+                          variant="subtitle2"
+                          gutterBottom
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                        >
+                          <TrendingUp color="secondary" fontSize="small" />
+                          Column Analysis
+                        </Typography>
+                        <Grid container spacing={1}>
+                          {uploadState.profile.schema.columns
+                            .slice(0, 6)
+                            .map((column, index) => (
+                              <Grid item xs={12} sm={6} md={4} key={index}>
+                                <Box
+                                  sx={{
+                                    p: 1,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight="medium"
+                                    noWrap
+                                    title={column.name}
+                                  >
+                                    {column.name}
+                                  </Typography>
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1,
+                                      mt: 0.5,
+                                    }}
+                                  >
+                                    <Chip
+                                      label={column.type}
+                                      size="small"
+                                      color={
+                                        column.type === 'numeric'
+                                          ? 'primary'
+                                          : column.type === 'text'
+                                            ? 'secondary'
+                                            : 'default'
+                                      }
+                                      variant="outlined"
+                                    />
+                                    {column.qualityFlags.length > 0 && (
+                                      <Warning
+                                        color="warning"
+                                        fontSize="small"
+                                      />
+                                    )}
+                                  </Box>
+                                </Box>
+                              </Grid>
+                            ))}
+                        </Grid>
+                        {uploadState.profile.schema.columns.length > 6 && (
+                          <Typography
+                            variant="caption"
+                            color="text.disabled"
+                            sx={{ mt: 1, display: 'block' }}
+                          >
+                            ... and{' '}
+                            {uploadState.profile.schema.columns.length - 6} more
+                            columns
+                          </Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Insights & Recommendations */}
+                  {(uploadState.profile.insights.keyFindings.length > 0 ||
+                    uploadState.profile.insights.recommendations.length >
+                      0) && (
+                    <Grid item xs={12}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography
+                            variant="subtitle2"
+                            gutterBottom
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                            }}
+                          >
+                            <TrendingUp color="info" fontSize="small" />
+                            Key Insights & Recommendations
+                          </Typography>
+                          {uploadState.profile.insights.keyFindings.length >
+                            0 && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography
+                                variant="body2"
+                                fontWeight="medium"
+                                color="text.secondary"
+                                gutterBottom
+                              >
+                                Key Findings:
+                              </Typography>
+                              <Stack spacing={0.5}>
+                                {uploadState.profile.insights.keyFindings.map(
+                                  (finding, index) => (
+                                    <Typography
+                                      key={index}
+                                      variant="body2"
+                                      sx={{ '&::before': { content: '"• "' } }}
+                                    >
+                                      {finding}
+                                    </Typography>
+                                  )
+                                )}
+                              </Stack>
+                            </Box>
+                          )}
+                          {uploadState.profile.insights.recommendations.length >
+                            0 && (
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                fontWeight="medium"
+                                color="text.secondary"
+                                gutterBottom
+                              >
+                                Recommendations:
+                              </Typography>
+                              <Stack spacing={0.5}>
+                                {uploadState.profile.insights.recommendations.map(
+                                  (rec, index) => (
+                                    <Typography
+                                      key={index}
+                                      variant="body2"
+                                      sx={{ '&::before': { content: '"• "' } }}
+                                    >
+                                      {rec}
+                                    </Typography>
+                                  )
+                                )}
+                              </Stack>
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
+
+                  {/* Security & PII Information */}
+                  {uploadState.profile.security.piiColumns.length > 0 && (
+                    <Grid item xs={12}>
+                      <Card
+                        variant="outlined"
+                        sx={{ borderColor: 'warning.main' }}
+                      >
+                        <CardContent>
+                          <Typography
+                            variant="subtitle2"
+                            gutterBottom
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                            }}
+                          >
+                            <Warning color="warning" fontSize="small" />
+                            Privacy and Security Notice
+                          </Typography>
+                          <Alert severity="warning" variant="outlined">
+                            <Typography variant="body2">
+                              Detected{' '}
+                              {uploadState.profile.security.piiColumns.length}{' '}
+                              column(s) with potentially sensitive data:{' '}
+                              <strong>
+                                {uploadState.profile.security.piiColumns.join(
+                                  ', '
+                                )}
+                              </strong>
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              Risk Level:{' '}
+                              <strong>
+                                {uploadState.profile.security.riskLevel}
+                              </strong>
+                            </Typography>
+                          </Alert>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
+                </Grid>
+              ) : null}
+            </Box>
+          )}
 
         {/* Error Toast */}
         <Snackbar

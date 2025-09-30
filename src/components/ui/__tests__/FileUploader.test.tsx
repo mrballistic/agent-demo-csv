@@ -1,86 +1,318 @@
+/**
+ * @jest-environment jsdom
+ */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
-import { waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import FileUploader from '../FileUploader';
 
-// keep fetch mocked to avoid network calls if component attempts upload during render
-global.fetch = vi.fn();
+// Mock fetch globally
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+// Create a test theme
+const theme = createTheme();
+
+// Wrapper component for tests
+const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ThemeProvider theme={theme}>{children}</ThemeProvider>
+);
+
+// Mock file for testing
+const createMockFile = (name: string, size: number, type: string) => {
+  const file = new File(['test content'], name, { type });
+  Object.defineProperty(file, 'size', { value: size });
+  return file;
+};
 
 describe('FileUploader Component', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (global.fetch as any).mockClear();
-  });
+  const mockOnFileUploaded = vi.fn();
+  const mockOnSystemMessage = vi.fn();
 
   const defaultProps = {
-    onFileUploaded: vi.fn(),
-    onSystemMessage: vi.fn(),
-  } as any;
+    onFileUploaded: mockOnFileUploaded,
+    onSystemMessage: mockOnSystemMessage,
+  };
 
-  it('renders upload area with controls', () => {
-    render(<FileUploader {...defaultProps} />);
+  const mockUploadResponse = {
+    fileId: 'test-file-id',
+    filename: 'test.csv',
+    size: 1024,
+    rowCount: 100,
+    profileHints: {
+      columnCount: 4,
+      hasHeaders: true,
+      sampleData: [['col1', 'col2', 'col3', 'col4']],
+    },
+  };
 
-    // component uses a heading with the drag/drop instruction
-    expect(
-      screen.getByRole('heading', { name: /drag and drop your csv file here/i })
-    ).toBeInTheDocument();
-    // secondary text with click to browse
-    expect(screen.getByText(/click to browse/i)).toBeInTheDocument();
-    // visible browse button
-    expect(
-      screen.getByRole('button', { name: /choose csv file to upload/i })
-    ).toBeInTheDocument();
-  });
-
-  it('uploads a CSV via file input and reports success', async () => {
-    const user = userEvent.setup();
-    const mockOnFileUploaded = vi.fn();
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        fileId: 'file_1',
-        filename: 'test.csv',
-        size: 123,
-        rowCount: 2,
-        profileHints: {
-          columnCount: 2,
-          hasHeaders: true,
-          sampleData: [
-            ['name', 'age'],
-            ['John', '30'],
+  const mockProfileResponse = {
+    success: true,
+    data: {
+      profile: {
+        id: 'profile-123',
+        metadata: {
+          filename: 'test.csv',
+          size: 1024,
+          rowCount: 100,
+          columnCount: 4,
+          processingTime: 5,
+        },
+        schema: {
+          columns: [
+            {
+              name: 'column1',
+              type: 'text',
+              unique: false,
+              nullable: false,
+              qualityFlags: [],
+              sampleValues: ['value1', 'value2'],
+            },
+            {
+              name: 'column2',
+              type: 'numeric',
+              unique: true,
+              nullable: false,
+              qualityFlags: [],
+              sampleValues: ['1', '2'],
+              statistics: { min: 1, max: 2, mean: 1.5 },
+            },
           ],
         },
-      }),
-    });
+        quality: {
+          overall: 95,
+          dimensions: {
+            completeness: 100,
+            consistency: 90,
+            accuracy: 95,
+            uniqueness: 90,
+            validity: 95,
+          },
+          issues: [],
+        },
+        insights: {
+          keyFindings: [
+            'Dataset has good quality',
+            'No missing values detected',
+          ],
+          recommendations: ['Consider adding more data validation'],
+          suggestedQueries: ['What is the average value?'],
+        },
+        security: {
+          piiColumns: [],
+          riskLevel: 'low',
+          recommendations: [],
+        },
+      },
+    },
+  };
 
-    render(
-      <FileUploader {...defaultProps} onFileUploaded={mockOnFileUploaded} />
-    );
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockClear();
+  });
 
-    const csvContent = 'name,age\nJohn,30';
-    const file = new File([csvContent], 'test.csv', { type: 'text/csv' });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    const input = screen.getByLabelText(
-      /^Choose CSV file$/i
-    ) as HTMLInputElement;
-    await user.upload(input, file);
-
-    await waitFor(() => {
-      expect(mockOnFileUploaded).toHaveBeenCalledWith(
-        expect.objectContaining({ fileId: 'file_1' })
+  describe('Component Rendering', () => {
+    it('should render upload interface by default', () => {
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} />
+        </TestWrapper>
       );
+
+      expect(screen.getByText('Upload Data')).toBeInTheDocument();
       expect(
-        screen.getByText(/File uploaded successfully!/i)
+        screen.getByText('Drag and drop your CSV file here')
       ).toBeInTheDocument();
+      expect(screen.getByText('Choose File')).toBeInTheDocument();
     });
 
-    // Advance internal timers (progress interval and collapse timeout) inside act
-    vi.useFakeTimers();
-    await act(async () => {
-      vi.runAllTimers();
+    it('should show sample data section when enabled', () => {
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} showSampleData={true} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Try sample data instantly')).toBeInTheDocument();
+      expect(screen.getByText('Comprehensive Sales Data')).toBeInTheDocument();
     });
-    vi.useRealTimers();
+
+    it('should hide sample data section when disabled', () => {
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} showSampleData={false} />
+        </TestWrapper>
+      );
+
+      expect(
+        screen.queryByText('Try sample data instantly')
+      ).not.toBeInTheDocument();
+    });
+
+    it('should be disabled when disabled prop is true', () => {
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} disabled={true} />
+        </TestWrapper>
+      );
+
+      const chooseFileButton = screen.getByText('Choose File');
+      expect(chooseFileButton).toBeDisabled();
+    });
+  });
+
+  describe('File Upload Process', () => {
+    it('should call onFileUploaded callback on successful upload', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockUploadResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockProfileResponse),
+        });
+
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const fileInput = screen.getByLabelText('Choose CSV file');
+      const validFile = createMockFile('test.csv', 1024, 'text/csv');
+
+      await userEvent.upload(fileInput, validFile);
+
+      await waitFor(() => {
+        expect(mockOnFileUploaded).toHaveBeenCalledWith(mockUploadResponse);
+      });
+    });
+
+    it('should display profile data after successful analysis', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockUploadResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockProfileResponse),
+        });
+
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const fileInput = screen.getByLabelText('Choose CSV file');
+      const validFile = createMockFile('test.csv', 1024, 'text/csv');
+
+      await userEvent.upload(fileInput, validFile);
+
+      await waitFor(() => {
+        expect(screen.getByText('Data Profile Analysis')).toBeInTheDocument();
+      });
+
+      // Check overview data
+      expect(screen.getByText('Dataset Overview')).toBeInTheDocument();
+      expect(screen.getByText('100')).toBeInTheDocument(); // Row count
+      expect(screen.getByText('4')).toBeInTheDocument(); // Column count
+
+      // Check quality score
+      expect(screen.getByText('Data Quality Score')).toBeInTheDocument();
+      expect(screen.getByText('95')).toBeInTheDocument(); // Overall score
+
+      // Check column analysis
+      expect(screen.getByText('Column Analysis')).toBeInTheDocument();
+      expect(screen.getByText('column1')).toBeInTheDocument();
+      expect(screen.getByText('column2')).toBeInTheDocument();
+
+      // Check insights
+      expect(
+        screen.getByText('Key Insights & Recommendations')
+      ).toBeInTheDocument();
+      expect(screen.getByText('Dataset has good quality')).toBeInTheDocument();
+    });
+
+    it('should handle upload errors gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Upload failed'));
+
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const fileInput = screen.getByLabelText('Choose CSV file');
+      const validFile = createMockFile('test.csv', 1024, 'text/csv');
+
+      await userEvent.upload(fileInput, validFile);
+
+      await waitFor(() => {
+        expect(screen.getByText('Upload failed')).toBeInTheDocument();
+      });
+
+      expect(mockOnFileUploaded).not.toHaveBeenCalled();
+    });
+
+    it('should display PII warning when sensitive data is detected', async () => {
+      const profileWithPII = {
+        ...mockProfileResponse,
+        data: {
+          profile: {
+            ...mockProfileResponse.data.profile,
+            security: {
+              piiColumns: ['email', 'phone'],
+              riskLevel: 'medium',
+              recommendations: ['Consider data masking'],
+            },
+          },
+        },
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockUploadResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(profileWithPII),
+        });
+
+      render(
+        <TestWrapper>
+          <FileUploader {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const fileInput = screen.getByLabelText('Choose CSV file');
+      const validFile = createMockFile('test.csv', 1024, 'text/csv');
+
+      await userEvent.upload(fileInput, validFile);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Privacy and Security Notice')
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByText(
+          /Detected 2 column\(s\) with potentially sensitive data/
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByText('email, phone')).toBeInTheDocument();
+      expect(screen.getByText('medium')).toBeInTheDocument();
+    });
   });
 });

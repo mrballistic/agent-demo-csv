@@ -5,8 +5,39 @@ import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
 import { runQueue, QueuedRun } from '@/lib/run-queue';
 import { cleanupRun } from '@/lib/run-cleanup';
+import { AgentOrchestrator } from '@/lib/agents/orchestrator';
+import { QueryPlannerAgent } from '@/lib/agents/query-planner-agent';
+import { SemanticExecutorAgent } from '@/lib/agents/semantic-executor-agent';
+import {
+  ConversationAgent,
+  ConversationOutput,
+} from '@/lib/agents/conversation-agent';
+import { AgentType } from '@/lib/agents/types';
 
 export const runtime = 'nodejs';
+
+// Initialize semantic layer orchestrator
+let orchestrator: AgentOrchestrator | null = null;
+
+async function getOrchestrator(): Promise<AgentOrchestrator> {
+  if (!orchestrator) {
+    orchestrator = new AgentOrchestrator();
+
+    // Register semantic agents
+    const queryPlannerAgent = new QueryPlannerAgent();
+    const semanticExecutorAgent = new SemanticExecutorAgent();
+    const conversationAgent = new ConversationAgent();
+
+    orchestrator.registerAgent(queryPlannerAgent);
+    orchestrator.registerAgent(semanticExecutorAgent);
+    orchestrator.registerAgent(conversationAgent);
+
+    console.log(
+      'Semantic layer orchestrator initialized with ConversationAgent'
+    );
+  }
+  return orchestrator;
+}
 
 // Track active streaming connections to prevent concurrent runs
 const activeStreams = new Map<string, boolean>();
@@ -67,7 +98,15 @@ export async function GET(
   if (!threadId) {
     return NextResponse.json(
       { error: 'threadId is required' },
-      { status: 400 }
+      {
+        status: 400,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -91,7 +130,15 @@ export async function GET(
         threadId,
         sessionCount: sessionStore.getSessionCount(),
       },
-      { status: 404 }
+      {
+        status: 404,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -107,7 +154,15 @@ export async function GET(
           'A streaming connection is already active for this thread. Please wait for it to complete.',
         threadId,
       },
-      { status: 409 } // Conflict
+      {
+        status: 409, // Conflict
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -332,8 +387,251 @@ export async function GET(
       Connection: 'keep-alive',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
     },
   });
+}
+
+/**
+ * Try to process query using semantic layer first, fallback to LLM if needed
+ */
+async function trySemanticProcessing(
+  sessionId: string,
+  query: string,
+  csvContent?: string
+): Promise<{
+  success: boolean;
+  result?: any;
+  confidence?: number;
+  shouldFallback?: boolean;
+}> {
+  try {
+    console.log(`🔍 Attempting semantic processing for query: "${query}"`);
+
+    // Get session and validate CSV data availability
+    const session = sessionStore.getSession(sessionId);
+    if (!session?.uploadedFile || !csvContent) {
+      console.log('❌ No CSV data available for semantic processing');
+      return { success: false, shouldFallback: true };
+    }
+
+    // Create data profile from CSV (simplified version for semantic layer)
+    const profile = await createDataProfileFromCSV(
+      csvContent,
+      session.uploadedFile.filename
+    );
+
+    // Get orchestrator and process with ConversationAgent
+    const orchestrator = await getOrchestrator();
+
+    // Use ConversationAgent for smart routing between semantic layer and LLM
+    const conversationAgent = orchestrator.getAgent(AgentType.CONVERSATION);
+    if (!conversationAgent) {
+      console.log('❌ ConversationAgent not available');
+      return { success: false, shouldFallback: true };
+    }
+
+    const result = await conversationAgent.execute(
+      {
+        sessionId,
+        query,
+        fileId: session.uploadedFile.id, // Pass the fileId for CSV context
+        context: {
+          previousAnalyses: [],
+          currentDataProfile: profile,
+          csvContent,
+          conversationHistory: [],
+          userPreferences: {
+            preferredChartTypes: ['bar', 'line', 'pie'],
+            detailLevel: 'detailed',
+            includeInsights: true,
+            includeVisualization: true,
+          },
+        },
+        preferSemanticLayer: true, // Prefer semantic layer for structured queries
+      },
+      {
+        requestId: `semantic-${Date.now()}`,
+        startTime: new Date(),
+        timeout: 10000,
+      }
+    );
+
+    if (!result.success || !result.data) {
+      console.log('❌ ConversationAgent processing failed');
+      return { success: false, shouldFallback: true };
+    }
+
+    const conversationOutput = result.data as ConversationOutput;
+    const confidence = conversationOutput.confidence;
+
+    console.log(
+      `🎯 ConversationAgent result: confidence ${confidence}, usedSemanticLayer: ${conversationOutput.usedSemanticLayer}`
+    );
+
+    // Use the result if ConversationAgent used semantic layer with good confidence
+    const shouldUseSemantic =
+      conversationOutput.usedSemanticLayer && confidence >= 0.7;
+
+    if (shouldUseSemantic) {
+      console.log('✅ Using ConversationAgent semantic layer results');
+      return {
+        success: true,
+        result: conversationOutput,
+        confidence,
+        shouldFallback: false,
+      };
+    } else {
+      console.log('⚠️ ConversationAgent routed to LLM, using those results');
+      return {
+        success: true,
+        result: conversationOutput,
+        confidence,
+        shouldFallback: false, // Don't fallback since ConversationAgent handled it
+      };
+    }
+  } catch (error) {
+    console.error('❌ Semantic processing failed:', error);
+    return { success: false, shouldFallback: true };
+  }
+}
+
+/**
+ * Helper to create simplified data profile from CSV content
+ */
+async function createDataProfileFromCSV(
+  csvContent: string,
+  filename: string
+): Promise<any> {
+  const lines = csvContent.split('\n').filter(line => line.trim());
+  const headers = lines[0]?.split(',') || [];
+  const sampleData = lines.slice(1, 6).map(line => {
+    const values = line.split(',');
+    const row: any = {};
+    headers.forEach((header, index) => {
+      row[header.trim()] = values[index]?.trim() || '';
+    });
+    return row;
+  });
+
+  return {
+    id: `profile-${Date.now()}`,
+    version: 1,
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    metadata: {
+      filename,
+      size: csvContent.length,
+      encoding: 'utf-8',
+      delimiter: ',',
+      rowCount: lines.length - 1,
+      columnCount: headers.length,
+      processingTime: 0,
+      checksum: 'semantic-processing',
+    },
+    schema: {
+      columns: headers.map(header => ({
+        name: header.trim(),
+        type: 'categorical', // Simplified for semantic processing
+      })),
+      relationships: [],
+      foreignKeys: [],
+    },
+    sampleData,
+    insights: {
+      keyFindings: [],
+      trends: [],
+      anomalies: [],
+      suggestedQueries: [],
+      recommendations: [],
+    },
+    quality: {},
+    security: {},
+    aggregations: {},
+    indexes: {},
+  } as any;
+}
+
+/**
+ * Process semantic query using orchestrator workflow
+ */
+async function processSemanticQueryWorkflow(
+  orchestrator: AgentOrchestrator,
+  query: string,
+  profile: any
+): Promise<any> {
+  // Create execution context
+  const context = {
+    requestId: `semantic-${Date.now()}`,
+    startTime: new Date(),
+    timeout: 30000,
+  };
+
+  // Get agents
+  const queryPlannerAgent = orchestrator.getAgent('query-planning' as any);
+  const semanticExecutorAgent = orchestrator.getAgent(
+    'semantic-executor' as any
+  );
+
+  if (!queryPlannerAgent || !semanticExecutorAgent) {
+    throw new Error('Semantic agents not available');
+  }
+
+  // Step 1: Query Planning
+  const planningResult = await queryPlannerAgent.execute(
+    { query, profile },
+    context
+  );
+
+  if (!planningResult.success) {
+    throw planningResult.error || new Error('Query planning failed');
+  }
+
+  const { queryIntent, executionPlan } = planningResult.data as any;
+
+  // Step 2: Semantic Execution
+  const executionResult = await semanticExecutorAgent.execute(
+    { queryIntent, profile, executionPlan },
+    context
+  );
+
+  if (!executionResult.success) {
+    throw executionResult.error || new Error('Semantic execution failed');
+  }
+
+  const semanticResult = executionResult.data as any;
+
+  // Return structured result
+  return {
+    id: `analysis-${Date.now()}`,
+    query,
+    intent: queryIntent,
+    executionPlan,
+    data: semanticResult.data || [],
+    insights: [
+      ...(semanticResult.insights.keyFindings || []).map((finding: string) => ({
+        type: 'insight' as const,
+        content: finding,
+        confidence: 0.9,
+      })),
+      ...(semanticResult.insights.trends || []).map((trend: any) => ({
+        type: 'trend' as const,
+        content: `${trend.metric} is ${trend.direction} with ${trend.changePercent}% change`,
+        confidence: 0.8,
+      })),
+    ],
+    metadata: {
+      executionTime: semanticResult.metadata.executionTime,
+      dataPoints:
+        semanticResult.data?.length || profile.sampleData?.length || 0,
+      cacheHit: false,
+      agentPath: ['query-planning', 'semantic-executor'],
+    },
+    suggestions: semanticResult.suggestions || [],
+  };
 }
 
 // Process a queued run (follow-up question)
@@ -358,13 +656,71 @@ async function processQueuedRun(
       timestamp: Date.now(),
     });
 
-    // Stream the follow-up conversation using conversationManager
-    console.log('Using conversation manager for follow-up question');
-    const analysisStream = conversationManager.streamConversation(
+    // Try semantic processing first, fallback to conversationManager if needed
+    let useSemanticResult = false;
+    let semanticAnalysisResult: any = null;
+
+    // Get CSV content if available for semantic processing
+    let csvContent: string | undefined;
+    if (queuedRun.fileId) {
+      const fileBuffer = await fileStore.getFile(queuedRun.fileId);
+      if (fileBuffer) {
+        csvContent = fileBuffer.toString('utf-8');
+      }
+    }
+
+    // Attempt semantic processing
+    const semanticProcessing = await trySemanticProcessing(
       queuedRun.sessionId,
       queuedRun.query,
-      queuedRun.fileId
+      csvContent
     );
+
+    let analysisStream: AsyncIterable<any>;
+
+    if (semanticProcessing.success && !semanticProcessing.shouldFallback) {
+      console.log('✅ Using semantic layer for follow-up question');
+      useSemanticResult = true;
+      semanticAnalysisResult = semanticProcessing.result;
+
+      // Create a synthetic stream for semantic results
+      analysisStream = (async function* () {
+        // Send structured output event for semantic results
+        // Create a sanitized version to avoid circular references
+        const sanitizedResult = {
+          response: semanticAnalysisResult.response,
+          confidence: semanticAnalysisResult.confidence,
+          usedSemanticLayer: semanticAnalysisResult.usedSemanticLayer,
+          agentPath: semanticAnalysisResult.agentPath,
+          insights: semanticAnalysisResult.insights || [],
+          followUpSuggestions: semanticAnalysisResult.followUpSuggestions || [],
+          // Exclude context to prevent circular references
+        };
+
+        yield {
+          type: 'structured_output',
+          data: {
+            type: 'analysis_response',
+            content: JSON.stringify(sanitizedResult),
+          },
+        };
+
+        // Send completion event
+        yield {
+          type: 'done',
+          data: { success: true },
+        };
+      })();
+    } else {
+      console.log(
+        '⚠️ Falling back to conversation manager for follow-up question'
+      );
+      analysisStream = conversationManager.streamConversation(
+        queuedRun.sessionId,
+        queuedRun.query,
+        queuedRun.fileId
+      );
+    }
 
     const messageId = `msg_${Date.now()}`;
     let accumulatedContent = '';

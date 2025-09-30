@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { conversationManager } from '@/lib/openai-responses';
 import { sessionStore } from '@/lib/session-store';
 import { fileStore } from '@/lib/file-store';
 import {
@@ -11,6 +10,12 @@ import {
   createErrorTelemetry,
 } from '@/lib/error-handler';
 import { telemetryService, Telemetry } from '@/lib/telemetry';
+import {
+  DataProfilingAgent,
+  globalOrchestrator,
+  createExecutionContext,
+  AgentType,
+} from '@/lib/agents';
 
 export const runtime = 'nodejs';
 
@@ -52,7 +57,15 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      return NextResponse.json(error.toErrorResponse(), { status: 400 });
+      return NextResponse.json(error.toErrorResponse(), {
+        status: 400,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      });
     }
 
     // Create or get session
@@ -72,7 +85,15 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        return NextResponse.json(error.toErrorResponse(), { status: 404 });
+        return NextResponse.json(error.toErrorResponse(), {
+          status: 404,
+          headers: {
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'X-XSS-Protection': '1; mode=block',
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+          },
+        });
       }
     } else {
       // Create a new session with a simple generated thread ID
@@ -92,6 +113,12 @@ export async function POST(request: NextRequest) {
     );
 
     try {
+      // Initialize agent orchestrator if needed
+      if (!globalOrchestrator.getAgent(AgentType.PROFILING)) {
+        const profilingAgent = new DataProfilingAgent();
+        globalOrchestrator.registerAgent(profilingAgent);
+      }
+
       // Use retry handler for profile analysis
       const result = await defaultRetryHandler.executeWithRetry(async () => {
         // Get the file content from our file store
@@ -102,7 +129,18 @@ export async function POST(request: NextRequest) {
           throw new Error(`File not found in store: ${fileId}`);
         }
 
-        // Store file reference in session for streaming endpoint
+        // Execute data profiling using agent orchestrator
+        const uploadedFile = {
+          buffer: fileContent,
+          name: fileMetadata.originalName,
+          mimeType: fileMetadata.mimeType || 'text/csv',
+          size: fileMetadata.size,
+        };
+
+        const profile =
+          await globalOrchestrator.processDataUpload(uploadedFile);
+
+        // Store profile and file reference in session for streaming endpoint
         sessionStore.updateSession(session.id, {
           uploadedFile: {
             id: fileId,
@@ -110,16 +148,30 @@ export async function POST(request: NextRequest) {
             size: fileMetadata.size,
             checksum: fileMetadata.checksum,
           },
+          dataProfile: profile,
         });
 
         // Generate a run ID for tracking
         const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2)}`;
 
+        // Extract and enhance security metadata for API response
+        const securityMetadata = {
+          piiDetected: (profile.security?.piiColumns?.length || 0) > 0,
+          riskLevel: profile.security?.riskLevel || 'low',
+          piiColumnsCount: profile.security?.piiColumns?.length || 0,
+          complianceFlags: profile.security?.complianceFlags || [],
+          hasRedaction: profile.security?.hasRedaction || false,
+          recommendations: profile.security?.recommendations || [],
+          piiColumns: profile.security?.piiColumns || [],
+        };
+
         return {
           runId,
           threadId: session.threadId,
           sessionId: session.id,
-          status: 'queued',
+          status: 'completed',
+          profile: profile,
+          security: securityMetadata,
         };
       }, 'profile_analysis');
 
@@ -145,7 +197,22 @@ export async function POST(request: NextRequest) {
         [] // fileIds will be available after run completes
       );
 
-      return NextResponse.json(result);
+      return NextResponse.json(result, {
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Cache-Control':
+            'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+          ...(result.security?.piiDetected && {
+            'X-PII-Detected': 'true',
+            'X-Risk-Level': result.security.riskLevel,
+          }),
+        },
+      });
     } catch (error) {
       console.error('Profile analysis error:', error);
 
@@ -177,7 +244,15 @@ export async function POST(request: NextRequest) {
         errorClass
       );
 
-      return NextResponse.json(appError.toErrorResponse(), { status: 500 });
+      return NextResponse.json(appError.toErrorResponse(), {
+        status: 500,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      });
     }
   } catch (error) {
     console.error('Profile request parsing failed:', error);
@@ -204,6 +279,14 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    return NextResponse.json(appError.toErrorResponse(), { status: 400 });
+    return NextResponse.json(appError.toErrorResponse(), {
+      status: 400,
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    });
   }
 }
