@@ -37,7 +37,6 @@ export type {
 
   // Chart types
   ChartConfig,
-  ChartType,
   ChartOutput,
 
   // Analysis types
@@ -56,6 +55,8 @@ export {
 export { DataProfilingAgent } from './profiling-agent';
 export { QueryPlannerAgent } from './query-planner-agent';
 export { SemanticExecutorAgent } from './semantic-executor-agent';
+export { SecurityAgent } from './security-agent';
+export { ChartAgent } from './chart-agent';
 
 export type {
   QueryPlannerInput,
@@ -65,3 +66,22 @@ export type {
   SemanticExecutorInput,
   SemanticExecutorResult,
 } from './semantic-executor-agent';
+export type {
+  SecurityAgentInput,
+  SecurityAnalysisResult,
+} from './security-agent';
+export type { ChartAgentInput, ChartAgentResult } from './chart-agent';
+
+// Chart utility exports
+export type {
+  ChartType,
+  ChartRecommendation,
+  DataCharacteristics,
+  ChartContext,
+} from './utils/chart-recommendation';
+export type {
+  ChartData,
+  ChartDimensions,
+  ChartStyling,
+  AccessibilityFeatures,
+} from './utils/svg-generator';

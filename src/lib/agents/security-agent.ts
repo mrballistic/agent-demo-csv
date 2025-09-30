@@ -26,14 +26,14 @@ export interface SecurityAgentInput {
   processingPurpose?: string;
   userConsent?: boolean;
   options?: {
-    enableRedaction: boolean;
+    enableRedaction?: boolean;
     redactionOptions?: {
-      preserveFormat: boolean;
-      showPartial: boolean;
-      useSemanticPlaceholders: boolean;
+      preserveFormat?: boolean;
+      showPartial?: boolean;
+      useSemanticPlaceholders?: boolean;
     };
-    complianceCheck: boolean;
-    auditLogging: boolean;
+    complianceCheck?: boolean;
+    auditLogging?: boolean;
   };
 }
 
@@ -185,6 +185,10 @@ export class SecurityAgent extends BaseAgent<
     }
 
     // Compile results
+    const processingTime = Math.max(
+      Date.now() - context.startTime.getTime(),
+      1
+    );
     const result: SecurityAnalysisResult = {
       piiDetections,
       riskAssessment,
@@ -192,7 +196,7 @@ export class SecurityAgent extends BaseAgent<
       redactionReport,
       auditActions,
       metadata: {
-        processingTime: Date.now() - context.startTime.getTime(),
+        processingTime,
         columnsAnalyzed: columns.length,
         piiColumnsFound: piiDetections.size,
         complianceRegulations: complianceAssessments.length,
