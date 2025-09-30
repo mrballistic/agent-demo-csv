@@ -500,16 +500,23 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
    * Map PII type enum to string format expected by SecurityProfile
    */
   private mapPIITypeToString(piiType: any): string {
-    const typeMap: Record<string, string> = {
-      EMAIL: 'email',
-      PHONE: 'phone',
-      SSN: 'ssn',
-      CREDIT_CARD: 'credit_card',
-      IP_ADDRESS: 'ip_address',
-      NAME: 'name',
-      ADDRESS: 'address',
-    };
-    return typeMap[piiType] || 'other';
+    // PIIType enum values are already the correct strings
+    // So we can return them directly, but validate against expected types
+    const validTypes = [
+      'email',
+      'phone',
+      'ssn',
+      'credit_card',
+      'ip_address',
+      'name',
+      'address',
+      'date_of_birth',
+      'driver_license',
+      'passport',
+      'account_number',
+    ];
+
+    return validTypes.includes(piiType) ? piiType : 'other';
   }
 
   /**

@@ -7,6 +7,7 @@ import {
   QuickActions,
   ArtifactsPanel,
   HelpText,
+  SecurityWarnings,
 } from '@/components/ui';
 import DataDeletionDialog from '@/components/ui/DataDeletionDialog';
 import RunStatusChip from '@/components/ui/RunStatusChip';
@@ -48,6 +49,8 @@ export default function Home() {
   >();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [securityData, setSecurityData] = useState<any>(null);
+  const [securityExpanded, setSecurityExpanded] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [showArtifactsDrawer, setShowArtifactsDrawer] = useState(false);
@@ -154,6 +157,31 @@ export default function Home() {
 
       // Set the real OpenAI thread ID
       setThreadId(profileData.threadId);
+
+      // Capture security data from profile response
+      console.log('🛡️ [Main] Profile data received:', {
+        status: profileData.status,
+        hasProfile: !!profileData.profile,
+        hasSecurity: !!profileData.profile?.security,
+        securityData: profileData.profile?.security,
+      });
+
+      if (profileData.status === 'completed' && profileData.profile?.security) {
+        console.log(
+          '🛡️ [Main] Setting security data:',
+          profileData.profile.security
+        );
+        // Add metadata and quality info for complete SecurityWarnings component
+        const securityDataWithExtras = {
+          ...profileData.profile.security,
+          metadata: profileData.profile.metadata,
+          quality: profileData.profile.quality,
+          insights: profileData.profile.insights,
+        };
+        setSecurityData(securityDataWithExtras);
+        // Expand security accordion when file upload completes
+        setSecurityExpanded(true);
+      }
 
       // Add a message about starting profiling
       const profilingMessage: ChatMessage = {
@@ -376,6 +404,13 @@ export default function Home() {
                     fileId={currentFileId}
                     onAction={handleQuickAction}
                     disabled={isRunning}
+                  />
+
+                  {/* Security warnings */}
+                  <SecurityWarnings
+                    securityData={securityData}
+                    expanded={securityExpanded}
+                    onExpandedChange={setSecurityExpanded}
                   />
 
                   {/* Help Text */}
