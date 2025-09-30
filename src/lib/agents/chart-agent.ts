@@ -2,31 +2,7 @@
  * Chart Generation Agent
  *
  * Intelligent chart agent that combines chart recommendation engine
- * an      // Early validation - check for meaningful data
-      if (dataCharacteristics.columns.length === 0) {
-        throw new Error('No chart recommendations available');
-      }
-
-      // Step 2: Get chart recommendation (or use provided type)
-      let recommendation: ChartRecommendation;
-      if (input.chartType) {
-        // Use provided chart type but still analyze for optimization
-        recommendation = this.createManualRecommendation(
-          input.chartType,
-          dataCharacteristics,
-          input.context
-        );
-      } else {
-        // Get intelligent recommendation
-        const recommendations = this.recommendationEngine.recommend(
-          dataCharacteristics,
-          input.context || { purpose: 'exploration', audience: 'general' }
-        );
-        if (recommendations.length === 0) {
-          throw new Error('No chart recommendations available');
-        }
-        recommendation = recommendations[0];
-      }mized SVG generation for comprehensive
+ * and optimized SVG generation for comprehensive
  * data visualization workflows.
  */
 

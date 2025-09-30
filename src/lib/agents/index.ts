@@ -57,6 +57,7 @@ export { QueryPlannerAgent } from './query-planner-agent';
 export { SemanticExecutorAgent } from './semantic-executor-agent';
 export { SecurityAgent } from './security-agent';
 export { ChartAgent } from './chart-agent';
+export { ConversationAgent } from './conversation-agent';
 
 export type {
   QueryPlannerInput,
@@ -71,6 +72,14 @@ export type {
   SecurityAnalysisResult,
 } from './security-agent';
 export type { ChartAgentInput, ChartAgentResult } from './chart-agent';
+export type {
+  ConversationInput,
+  ConversationOutput,
+  ConversationContext,
+  AnalysisReference,
+  ConversationTurn,
+  UserPreferences,
+} from './conversation-agent';
 
 // Chart utility exports
 export type {

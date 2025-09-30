@@ -22,6 +22,7 @@ import {
   SemanticExecutorInput,
 } from './semantic-executor-agent';
 import { QueryPlannerResult } from './query-planner-agent';
+import { ConversationOutput } from './conversation-agent';
 
 export interface UploadedFile {
   buffer: Buffer;
@@ -319,12 +320,77 @@ export class AgentOrchestrator {
 
     this.logger.info('Executing query with conversation agent (LLM fallback)');
 
-    const result = await conversationAgent.execute({ query, profile }, context);
+    // Create a session ID for this query
+    const sessionId = `orchestrator-${Date.now()}`;
+
+    const result = await conversationAgent.execute(
+      {
+        sessionId,
+        query,
+        context: {
+          previousAnalyses: [],
+          currentDataProfile: profile,
+          conversationHistory: [],
+          userPreferences: {
+            preferredChartTypes: ['bar', 'line', 'pie'],
+            detailLevel: 'detailed',
+            includeInsights: true,
+            includeVisualization: true,
+          },
+        },
+      },
+      context
+    );
+
     if (!result.success) {
       throw result.error || new Error('Conversation agent failed');
     }
 
-    return result.data as AnalysisResult;
+    const conversationOutput = result.data as ConversationOutput;
+
+    // Convert ConversationOutput to AnalysisResult format
+    const analysisResult: AnalysisResult = {
+      id: `analysis-${Date.now()}`,
+      query,
+      intent: {
+        type: 'custom',
+        confidence: conversationOutput.confidence,
+        entities: {
+          measures: [],
+          dimensions: [],
+          filters: [],
+        },
+        operation: {
+          groupBy: [],
+          aggregation: 'count',
+          sort: [],
+        },
+      },
+      executionPlan: {
+        id: `plan-${Date.now()}`,
+        steps: [],
+        estimatedCost: 1,
+        estimatedTime: 100,
+        optimizations: [],
+        cacheKey: 'orchestrator-fallback',
+        fallbackToLLM: true,
+      },
+      data: [],
+      insights: (conversationOutput.insights || []).map(insight => ({
+        ...insight,
+        data: insight.data || {},
+      })),
+
+      metadata: {
+        executionTime: Date.now() - context.startTime.getTime(),
+        dataPoints: 0,
+        cacheHit: false,
+        agentPath: conversationOutput.agentPath,
+      },
+      suggestions: conversationOutput.followUpSuggestions,
+    };
+
+    return analysisResult;
   }
 
   /**
