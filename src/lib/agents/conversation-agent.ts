@@ -356,6 +356,15 @@ export class ConversationAgent extends BaseAgent<
 
       const semanticResult = executorResult.data as any;
 
+      // Check if the semantic result indicates LLM processing is needed
+      if (semanticResult.requiresLLMProcessing) {
+        this.info('Semantic processing indicates LLM fallback needed', {
+          reason: semanticResult.llmFallbackReason,
+        });
+        // Fall back to LLM processing
+        return await this.processLLMQuery(input, context, execContext);
+      }
+
       // Generate insights from semantic results
       const insights =
         await this.generateInsightsFromSemanticResult(semanticResult);
@@ -365,6 +374,14 @@ export class ConversationAgent extends BaseAgent<
         semanticResult,
         insights
       );
+
+      // Ensure we have a valid response
+      if (!response || response.trim().length === 0) {
+        this.warn(
+          'Semantic processing returned empty response, falling back to LLM'
+        );
+        return await this.processLLMQuery(input, context, execContext);
+      }
 
       return {
         response,
@@ -622,6 +639,11 @@ export class ConversationAgent extends BaseAgent<
   ): Promise<string> {
     let response = '';
 
+    // Handle cases where semantic result is undefined or incomplete
+    if (!semanticResult) {
+      return 'I encountered an issue processing your query. Please try rephrasing your question.';
+    }
+
     // Start with a natural greeting based on the query intent
     const intentType = semanticResult.queryIntent?.type || 'analysis';
     response += this.getIntentGreeting(intentType);
@@ -629,6 +651,8 @@ export class ConversationAgent extends BaseAgent<
     // Add data summary
     if (semanticResult.data && Array.isArray(semanticResult.data)) {
       response += ` I found ${semanticResult.data.length} records that match your criteria.`;
+    } else {
+      response += ' I analyzed your data based on the available information.';
     }
 
     // Add key insights
@@ -648,6 +672,12 @@ export class ConversationAgent extends BaseAgent<
         const summary = keys.map(key => `${key}: ${record[key]}`).join(', ');
         response += `${index + 1}. ${summary}\n`;
       });
+    }
+
+    // If we still don't have much content, add a helpful message
+    if (response.trim().length < 50) {
+      response +=
+        '\n\nFor more detailed analysis, you may want to ask more specific questions about your data.';
     }
 
     return response.trim();
