@@ -9,7 +9,6 @@
  */
 import { BaseAgent } from './base';
 import { AgentType, AgentExecutionContext } from './types';
-import { globalOrchestrator } from './orchestrator';
 import { conversationManager } from '@/lib/openai-responses';
 import { QueryPlannerAgent } from './query-planner-agent';
 import { SemanticExecutorAgent } from './semantic-executor-agent';
@@ -313,17 +312,49 @@ export class ConversationAgent extends BaseAgent<
     this.info('Processing semantic-only query');
 
     try {
-      // Use orchestrator's executeQuery method
+      // Check if we have the data profile needed for semantic processing
       if (!context.currentDataProfile) {
         throw new Error('No data profile available for semantic processing');
       }
 
-      const analysisResult = await globalOrchestrator.executeQuery(
-        input.query,
-        input.fileId || 'unknown'
+      // Create semantic agents directly instead of using global orchestrator
+      // This ensures we have the agents available even if orchestrator isn't properly configured
+      const queryPlannerAgent = new QueryPlannerAgent();
+      const semanticExecutorAgent = new SemanticExecutorAgent();
+
+      // Plan the query
+      const plannerResult = await queryPlannerAgent.execute(
+        {
+          query: input.query,
+          profile: context.currentDataProfile,
+        },
+        execContext
       );
 
-      const semanticResult = analysisResult;
+      if (!plannerResult.success) {
+        throw new Error(`Query planning failed: ${plannerResult.error}`);
+      }
+
+      const plannerData = plannerResult.data as {
+        queryIntent: any;
+        executionPlan: any;
+      };
+
+      // Execute the planned query with the current data profile
+      const executorResult = await semanticExecutorAgent.execute(
+        {
+          executionPlan: plannerData.executionPlan,
+          queryIntent: plannerData.queryIntent,
+          profile: context.currentDataProfile,
+        },
+        execContext
+      );
+
+      if (!executorResult.success) {
+        throw new Error(`Semantic execution failed: ${executorResult.error}`);
+      }
+
+      const semanticResult = executorResult.data as any;
 
       // Generate insights from semantic results
       const insights =
@@ -342,7 +373,7 @@ export class ConversationAgent extends BaseAgent<
           AgentType.QUERY_PLANNING,
           AgentType.SEMANTIC_EXECUTOR,
         ],
-        confidence: semanticResult.intent?.confidence || 0.8,
+        confidence: plannerData.queryIntent?.confidence || 0.8,
         usedSemanticLayer: true,
         insights,
         followUpSuggestions: [],
@@ -756,7 +787,16 @@ Keep your response conversational and helpful.`;
       const analysisRef: AnalysisReference = {
         id: `analysis-${Date.now()}`,
         query: '', // Would need to be passed from input
-        result: result,
+        result: {
+          // Store only the essential parts to avoid circular references
+          response: result.response,
+          confidence: result.confidence,
+          usedSemanticLayer: result.usedSemanticLayer,
+          agentPath: result.agentPath,
+          insights: result.insights || [],
+          followUpSuggestions: result.followUpSuggestions || [],
+          // Exclude context to prevent circular references
+        },
         timestamp: new Date(),
         type: result.usedSemanticLayer ? 'semantic' : 'llm',
         confidence: result.confidence,

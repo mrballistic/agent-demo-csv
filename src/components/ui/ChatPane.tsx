@@ -823,7 +823,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({
                       {
                         hour: '2-digit',
                         minute: '2-digit',
-                        timeZone: 'UTC',
+                        timeZone: 'America/Los_Angeles',
                       }
                     )}
                     {message.isStreaming && (

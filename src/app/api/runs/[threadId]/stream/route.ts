@@ -8,6 +8,11 @@ import { cleanupRun } from '@/lib/run-cleanup';
 import { AgentOrchestrator } from '@/lib/agents/orchestrator';
 import { QueryPlannerAgent } from '@/lib/agents/query-planner-agent';
 import { SemanticExecutorAgent } from '@/lib/agents/semantic-executor-agent';
+import {
+  ConversationAgent,
+  ConversationOutput,
+} from '@/lib/agents/conversation-agent';
+import { AgentType } from '@/lib/agents/types';
 
 export const runtime = 'nodejs';
 
@@ -21,11 +26,15 @@ async function getOrchestrator(): Promise<AgentOrchestrator> {
     // Register semantic agents
     const queryPlannerAgent = new QueryPlannerAgent();
     const semanticExecutorAgent = new SemanticExecutorAgent();
+    const conversationAgent = new ConversationAgent();
 
     orchestrator.registerAgent(queryPlannerAgent);
     orchestrator.registerAgent(semanticExecutorAgent);
+    orchestrator.registerAgent(conversationAgent);
 
-    console.log('Semantic layer orchestrator initialized');
+    console.log(
+      'Semantic layer orchestrator initialized with ConversationAgent'
+    );
   }
   return orchestrator;
 }
@@ -415,39 +424,73 @@ async function trySemanticProcessing(
       session.uploadedFile.filename
     );
 
-    // Get orchestrator and process semantic query
+    // Get orchestrator and process with ConversationAgent
     const orchestrator = await getOrchestrator();
 
-    // Execute semantic query processing through orchestrator workflow
-    // Note: We're using the internal helper to test the workflow
-    const result = await processSemanticQueryWorkflow(
-      orchestrator,
-      query,
-      profile
+    // Use ConversationAgent for smart routing between semantic layer and LLM
+    const conversationAgent = orchestrator.getAgent(AgentType.CONVERSATION);
+    if (!conversationAgent) {
+      console.log('❌ ConversationAgent not available');
+      return { success: false, shouldFallback: true };
+    }
+
+    const result = await conversationAgent.execute(
+      {
+        sessionId,
+        query,
+        fileId: session.uploadedFile.id, // Pass the fileId for CSV context
+        context: {
+          previousAnalyses: [],
+          currentDataProfile: profile,
+          csvContent,
+          conversationHistory: [],
+          userPreferences: {
+            preferredChartTypes: ['bar', 'line', 'pie'],
+            detailLevel: 'detailed',
+            includeInsights: true,
+            includeVisualization: true,
+          },
+        },
+        preferSemanticLayer: true, // Prefer semantic layer for structured queries
+      },
+      {
+        requestId: `semantic-${Date.now()}`,
+        startTime: new Date(),
+        timeout: 10000,
+      }
     );
 
-    const confidence = result.intent?.confidence || 0;
+    if (!result.success || !result.data) {
+      console.log('❌ ConversationAgent processing failed');
+      return { success: false, shouldFallback: true };
+    }
+
+    const conversationOutput = result.data as ConversationOutput;
+    const confidence = conversationOutput.confidence;
+
     console.log(
-      `🎯 Semantic processing result: confidence ${confidence}, type: ${result.intent?.type}`
+      `🎯 ConversationAgent result: confidence ${confidence}, usedSemanticLayer: ${conversationOutput.usedSemanticLayer}`
     );
 
-    // Determine if we should use semantic results or fallback to LLM
-    const shouldUseSemantic = confidence >= 0.7 && result.data?.length > 0;
+    // Use the result if ConversationAgent used semantic layer with good confidence
+    const shouldUseSemantic =
+      conversationOutput.usedSemanticLayer && confidence >= 0.7;
 
     if (shouldUseSemantic) {
-      console.log('✅ Using semantic layer results');
+      console.log('✅ Using ConversationAgent semantic layer results');
       return {
         success: true,
-        result,
+        result: conversationOutput,
         confidence,
         shouldFallback: false,
       };
     } else {
-      console.log('⚠️ Low confidence or no data, falling back to LLM');
+      console.log('⚠️ ConversationAgent routed to LLM, using those results');
       return {
-        success: false,
+        success: true,
+        result: conversationOutput,
         confidence,
-        shouldFallback: true,
+        shouldFallback: false, // Don't fallback since ConversationAgent handled it
       };
     }
   } catch (error) {
@@ -643,11 +686,22 @@ async function processQueuedRun(
       // Create a synthetic stream for semantic results
       analysisStream = (async function* () {
         // Send structured output event for semantic results
+        // Create a sanitized version to avoid circular references
+        const sanitizedResult = {
+          response: semanticAnalysisResult.response,
+          confidence: semanticAnalysisResult.confidence,
+          usedSemanticLayer: semanticAnalysisResult.usedSemanticLayer,
+          agentPath: semanticAnalysisResult.agentPath,
+          insights: semanticAnalysisResult.insights || [],
+          followUpSuggestions: semanticAnalysisResult.followUpSuggestions || [],
+          // Exclude context to prevent circular references
+        };
+
         yield {
           type: 'structured_output',
           data: {
             type: 'analysis_response',
-            content: JSON.stringify(semanticAnalysisResult),
+            content: JSON.stringify(sanitizedResult),
           },
         };
 
