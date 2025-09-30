@@ -9,7 +9,6 @@ import {
   Paper,
   Typography,
   Stack,
-  Chip,
   TextField,
   IconButton,
   CircularProgress,
@@ -18,14 +17,7 @@ import {
   Skeleton,
   Link,
 } from '@mui/material';
-import {
-  Person,
-  SmartToy,
-  Info,
-  Send,
-  Stop,
-  KeyboardArrowDown,
-} from '@mui/icons-material';
+import { Send, Stop, KeyboardArrowDown } from '@mui/icons-material';
 import { ChatMessage } from '@/types';
 import { announceToScreenReader, srOnlyStyles } from '@/lib/accessibility';
 import ImageLightbox from './ImageLightbox';
@@ -392,32 +384,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({
     return undefined;
   }, [lightboxOpen, closeLightbox]);
 
-  const getMessageIcon = (role: ChatMessage['role']) => {
-    switch (role) {
-      case 'user':
-        return <Person />;
-      case 'assistant':
-        return <SmartToy />;
-      case 'system':
-        return <Info />;
-      default:
-        return <Info />;
-    }
-  };
-
-  const getMessageColor = (role: ChatMessage['role']) => {
-    switch (role) {
-      case 'user':
-        return 'primary';
-      case 'assistant':
-        return 'secondary';
-      case 'system':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
   return (
     <Paper
       {...(className && { className })}
@@ -548,305 +514,359 @@ const ChatPane: React.FC<ChatPaneProps> = ({
           </Box>
         ) : (
           <Stack spacing={2}>
-            {messages.map((message, index) => (
-              <Box
-                key={message.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 1,
-                  opacity: message.isComplete === false ? 0.7 : 1,
-                  transition: 'opacity 0.3s ease',
-                }}
-                role="article"
-                data-role={message.role}
-                aria-label={`Message from ${message.role} at ${new Date(
-                  // handle numeric or Date timestamps
-                  message.timestamp as any
-                ).toLocaleTimeString('en-US', { timeZone: 'UTC' })}`}
-                tabIndex={0}
-              >
-                <Chip
-                  icon={getMessageIcon(message.role)}
-                  label={message.role}
-                  size="small"
-                  color={getMessageColor(message.role) as any}
-                  variant="outlined"
-                  aria-hidden="true"
-                />
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={srOnlyStyles}>
-                    {message.role === 'user'
-                      ? 'You said:'
-                      : message.role === 'assistant'
-                        ? 'AI responded:'
-                        : 'System message:'}
-                  </Box>
-                  <Box
+            {messages
+              .filter(message => {
+                // Filter out system messages that are purely informational/debug
+                if (message.role === 'system') {
+                  const content = message.content.toLowerCase();
+                  const systemPhrases = [
+                    'starting data profiling',
+                    'start data profiling',
+                    'data profiling completed',
+                    'processing query',
+                    'semantic processing',
+                    'query planning',
+                    'executing semantic',
+                    'starting analysis',
+                    'analysis completed',
+                    'sample data loaded:',
+                    'file uploaded:',
+                    'queued (position',
+                  ];
+
+                  // Hide system messages that start with these phrases
+                  if (
+                    systemPhrases.some(phrase => content.startsWith(phrase))
+                  ) {
+                    return false;
+                  }
+                }
+                return true; // Show all other messages (user, assistant, error system messages)
+              })
+              .map((message, index) => (
+                <Box
+                  key={message.id}
+                  sx={{
+                    display: 'flex',
+                    justifyContent:
+                      message.role === 'user' ? 'flex-end' : 'flex-start',
+                    mb: 2,
+                    opacity: message.isComplete === false ? 0.7 : 1,
+                    transition: 'opacity 0.3s ease',
+                  }}
+                  role="article"
+                  data-role={message.role}
+                  aria-label={`Message from ${message.role} at ${new Date(
+                    // handle numeric or Date timestamps
+                    message.timestamp as any
+                  ).toLocaleTimeString('en-US', { timeZone: 'UTC' })}`}
+                  tabIndex={0}
+                >
+                  <Paper
+                    elevation={1}
                     sx={{
-                      '& p': { mb: 1 },
-                      '& pre': {
-                        bgcolor: 'action.hover',
-                        p: 1,
-                        borderRadius: 1,
-                        overflow: 'auto',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      },
-                      '& code': {
-                        bgcolor: 'action.hover',
-                        p: 0.5,
-                        borderRadius: 0.5,
-                        fontSize: '0.875em',
-                        fontFamily: 'monospace',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      },
-                      '& blockquote': {
-                        borderLeft: '4px solid',
-                        borderColor: 'primary.main',
-                        pl: 2,
-                        ml: 0,
-                        fontStyle: 'italic',
-                      },
-                      '& ul, & ol': {
-                        pl: 2,
-                      },
-                      '& table': {
-                        borderCollapse: 'collapse',
-                        width: '100%',
-                        mb: 1,
-                      },
-                      '& th, & td': {
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        p: 1,
-                        textAlign: 'left',
-                      },
-                      '& th': {
-                        bgcolor: 'action.hover',
-                        fontWeight: 'bold',
-                      },
+                      maxWidth: '75%',
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor:
+                        message.role === 'user'
+                          ? 'grey.800'
+                          : 'background.paper',
+                      color:
+                        message.role === 'user'
+                          ? 'common.white'
+                          : 'text.primary',
+                      ...(message.role === 'user' && {
+                        '& .MuiTypography-root': {
+                          color: 'common.white',
+                        },
+                        '& code': {
+                          bgcolor: 'rgba(255, 255, 255, 0.1)',
+                          color: 'common.white',
+                        },
+                        '& pre': {
+                          bgcolor: 'rgba(255, 255, 255, 0.1)',
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                          '& code': {
+                            bgcolor: 'transparent',
+                          },
+                        },
+                      }),
                     }}
                   >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw]}
-                      components={{
-                        // Override paragraph to use MUI Typography
-                        p: ({ children }) => (
-                          <Typography
-                            variant="body1"
-                            sx={{
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              mb: 1,
-                            }}
-                          >
-                            {children}
-                          </Typography>
-                        ),
-                        // Override links to use theme colors and open in new tab
-                        a: ({ href, children }) => {
-                          // Determine if this is an external link
-                          const isExternal =
-                            href &&
-                            (href.startsWith('http://') ||
-                              href.startsWith('https://') ||
-                              href.startsWith('//') ||
-                              (!href.startsWith('/') &&
-                                !href.startsWith('#') &&
-                                href.includes('.')));
-
-                          return (
-                            <Link
-                              href={href}
-                              target={isExternal ? '_blank' : undefined}
-                              rel={
-                                isExternal ? 'noopener noreferrer' : undefined
-                              }
-                              sx={{
-                                color: 'primary.main',
-                                textDecoration: 'none',
-                                '&:hover': {
-                                  textDecoration: 'underline',
-                                  color: 'primary.dark',
-                                },
-                              }}
-                            >
-                              {children}
-                            </Link>
-                          );
-                        },
-                        // Override code to ensure proper styling
-                        code: ({ children, className }) => {
-                          const isInline = !className?.includes('language-');
-                          return (
-                            <Box
-                              component={isInline ? 'code' : 'pre'}
-                              sx={{
-                                fontFamily: 'monospace',
-                                fontSize: '0.875em',
-                                ...(isInline
-                                  ? {
-                                      bgcolor: 'action.hover',
-                                      px: 0.5,
-                                      py: 0.25,
-                                      borderRadius: 0.5,
-                                      display: 'inline',
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                    }
-                                  : {
-                                      bgcolor: 'action.hover',
-                                      p: 1,
-                                      borderRadius: 1,
-                                      overflow: 'auto',
-                                      display: 'block',
-                                      whiteSpace: 'pre',
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                    }),
-                              }}
-                            >
-                              {children}
-                            </Box>
-                          );
-                        },
-                        // Override images for lightbox functionality
-                        img: ({ src, alt }) => {
-                          const isArtifactImage =
-                            src?.includes('/api/artifacts/');
-                          const imageTitle = alt?.includes('Chart')
-                            ? 'Generated Chart'
-                            : alt;
-
-                          return (
-                            <Box
-                              sx={{
-                                my: 2,
-                                textAlign: 'center',
-                              }}
-                            >
-                              <Box
-                                component="img"
-                                src={src}
-                                alt={alt}
-                                onClick={
-                                  isArtifactImage
-                                    ? () => openLightbox(src!, alt!, imageTitle)
-                                    : undefined
-                                }
-                                sx={{
-                                  maxWidth: '100%',
-                                  height: 'auto',
-                                  borderRadius: 1,
-                                  boxShadow: 2,
-                                  display: 'block',
-                                  mx: 'auto',
-                                  cursor: isArtifactImage
-                                    ? 'pointer'
-                                    : 'default',
-                                  transition:
-                                    'transform 0.2s ease, box-shadow 0.2s ease',
-                                  '&:hover': isArtifactImage
-                                    ? {
-                                        transform: 'scale(1.02)',
-                                        boxShadow: 3,
-                                      }
-                                    : {},
-                                }}
-                                loading="lazy"
-                                title={
-                                  isArtifactImage
-                                    ? 'Click to view full size'
-                                    : undefined
-                                }
-                              />
-                              {isArtifactImage && (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{
-                                    mt: 1,
-                                    display: 'block',
-                                    fontStyle: 'italic',
-                                  }}
-                                >
-                                  Click image to view full size
-                                </Typography>
-                              )}
-                            </Box>
-                          );
-                        },
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </Box>
-                  {message.isStreaming && (
+                    <Box sx={srOnlyStyles}>
+                      {message.role === 'user'
+                        ? 'You said:'
+                        : message.role === 'assistant'
+                          ? 'AI responded:'
+                          : 'System message:'}
+                    </Box>
                     <Box
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        mt: 1,
+                        '& p': { mb: 1 },
+                        '& pre': {
+                          bgcolor: 'action.hover',
+                          p: 1,
+                          borderRadius: 1,
+                          overflow: 'auto',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        },
+                        '& code': {
+                          bgcolor: 'action.hover',
+                          p: 0.5,
+                          borderRadius: 0.5,
+                          fontSize: '0.875em',
+                          fontFamily: 'monospace',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        },
+                        '& blockquote': {
+                          borderLeft: '4px solid',
+                          borderColor: 'primary.main',
+                          pl: 2,
+                          ml: 0,
+                          fontStyle: 'italic',
+                        },
+                        '& ul, & ol': {
+                          pl: 2,
+                        },
+                        '& table': {
+                          borderCollapse: 'collapse',
+                          width: '100%',
+                          mb: 1,
+                        },
+                        '& th, & td': {
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          p: 1,
+                          textAlign: 'left',
+                        },
+                        '& th': {
+                          bgcolor: 'action.hover',
+                          fontWeight: 'bold',
+                        },
                       }}
                     >
-                      <Box
-                        component="span"
-                        sx={{
-                          display: 'inline-block',
-                          width: 2,
-                          height: '1.2em',
-                          bgcolor: 'primary.main',
-                          animation: 'blink 1s infinite',
-                          '@keyframes blink': {
-                            '0%, 50%': { opacity: 1 },
-                            '51%, 100%': { opacity: 0 },
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
+                        components={{
+                          // Override paragraph to use MUI Typography
+                          p: ({ children }) => (
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                mb: 1,
+                              }}
+                            >
+                              {children}
+                            </Typography>
+                          ),
+                          // Override links to use theme colors and open in new tab
+                          a: ({ href, children }) => {
+                            // Determine if this is an external link
+                            const isExternal =
+                              href &&
+                              (href.startsWith('http://') ||
+                                href.startsWith('https://') ||
+                                href.startsWith('//') ||
+                                (!href.startsWith('/') &&
+                                  !href.startsWith('#') &&
+                                  href.includes('.')));
+
+                            return (
+                              <Link
+                                href={href}
+                                target={isExternal ? '_blank' : undefined}
+                                rel={
+                                  isExternal ? 'noopener noreferrer' : undefined
+                                }
+                                sx={{
+                                  color: 'primary.main',
+                                  textDecoration: 'none',
+                                  '&:hover': {
+                                    textDecoration: 'underline',
+                                    color: 'primary.dark',
+                                  },
+                                }}
+                              >
+                                {children}
+                              </Link>
+                            );
+                          },
+                          // Override code to ensure proper styling
+                          code: ({ children, className }) => {
+                            const isInline = !className?.includes('language-');
+                            return (
+                              <Box
+                                component={isInline ? 'code' : 'pre'}
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.875em',
+                                  ...(isInline
+                                    ? {
+                                        bgcolor: 'action.hover',
+                                        px: 0.5,
+                                        py: 0.25,
+                                        borderRadius: 0.5,
+                                        display: 'inline',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                      }
+                                    : {
+                                        bgcolor: 'action.hover',
+                                        p: 1,
+                                        borderRadius: 1,
+                                        overflow: 'auto',
+                                        display: 'block',
+                                        whiteSpace: 'pre',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                      }),
+                                }}
+                              >
+                                {children}
+                              </Box>
+                            );
+                          },
+                          // Override images for lightbox functionality
+                          img: ({ src, alt }) => {
+                            const isArtifactImage =
+                              src?.includes('/api/artifacts/');
+                            const imageTitle = alt?.includes('Chart')
+                              ? 'Generated Chart'
+                              : alt;
+
+                            return (
+                              <Box
+                                sx={{
+                                  my: 2,
+                                  textAlign: 'center',
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={src}
+                                  alt={alt}
+                                  onClick={
+                                    isArtifactImage
+                                      ? () =>
+                                          openLightbox(src!, alt!, imageTitle)
+                                      : undefined
+                                  }
+                                  sx={{
+                                    maxWidth: '100%',
+                                    height: 'auto',
+                                    borderRadius: 1,
+                                    boxShadow: 2,
+                                    display: 'block',
+                                    mx: 'auto',
+                                    cursor: isArtifactImage
+                                      ? 'pointer'
+                                      : 'default',
+                                    transition:
+                                      'transform 0.2s ease, box-shadow 0.2s ease',
+                                    '&:hover': isArtifactImage
+                                      ? {
+                                          transform: 'scale(1.02)',
+                                          boxShadow: 3,
+                                        }
+                                      : {},
+                                  }}
+                                  loading="lazy"
+                                  title={
+                                    isArtifactImage
+                                      ? 'Click to view full size'
+                                      : undefined
+                                  }
+                                />
+                                {isArtifactImage && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{
+                                      mt: 1,
+                                      display: 'block',
+                                      fontStyle: 'italic',
+                                    }}
+                                  >
+                                    Click image to view full size
+                                  </Typography>
+                                )}
+                              </Box>
+                            );
                           },
                         }}
-                        aria-hidden="true"
-                      />
-                      <Box sx={srOnlyStyles} aria-live="polite">
-                        AI is typing...
-                      </Box>
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                     </Box>
-                  )}
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 1, display: 'block' }}
-                  >
-                    {new Date(message.timestamp as any).toLocaleTimeString(
-                      'en-US',
-                      {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'America/Los_Angeles',
-                      }
-                    )}
                     {message.isStreaming && (
-                      <CircularProgress
-                        size={12}
-                        sx={{ ml: 1 }}
-                        aria-hidden="true"
-                      />
-                    )}
-                  </Typography>
-                  {/* Render any artifacts attached to the message */}
-                  {Array.isArray((message as any).artifacts) && (
-                    <Box sx={{ mt: 1 }}>
-                      {(message as any).artifacts.map((a: any) => (
-                        <Box key={a.id}>
-                          <Link href={a.downloadUrl}>{a.name}</Link>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mt: 1,
+                        }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-block',
+                            width: 2,
+                            height: '1.2em',
+                            bgcolor: 'primary.main',
+                            animation: 'blink 1s infinite',
+                            '@keyframes blink': {
+                              '0%, 50%': { opacity: 1 },
+                              '51%, 100%': { opacity: 0 },
+                            },
+                          }}
+                          aria-hidden="true"
+                        />
+                        <Box sx={srOnlyStyles} aria-live="polite">
+                          AI is typing...
                         </Box>
-                      ))}
-                    </Box>
-                  )}
+                      </Box>
+                    )}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ mt: 1, display: 'block' }}
+                    >
+                      {new Date(message.timestamp as any).toLocaleTimeString(
+                        'en-US',
+                        {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: 'America/Los_Angeles',
+                        }
+                      )}
+                      {message.isStreaming && (
+                        <CircularProgress
+                          size={12}
+                          sx={{ ml: 1 }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </Typography>
+                    {/* Render any artifacts attached to the message */}
+                    {Array.isArray((message as any).artifacts) && (
+                      <Box sx={{ mt: 1 }}>
+                        {(message as any).artifacts.map((a: any) => (
+                          <Box key={a.id}>
+                            <Link href={a.downloadUrl}>{a.name}</Link>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Paper>
                 </Box>
-              </Box>
-            ))}
+              ))}
             {/* Working animation for when analysis is running */}
             {effectiveIsRunning && (
               <Fade in={effectiveIsRunning}>

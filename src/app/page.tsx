@@ -51,6 +51,7 @@ export default function Home() {
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [securityData, setSecurityData] = useState<any>(null);
   const [securityExpanded, setSecurityExpanded] = useState(false);
+  const [isProfiling, setIsProfiling] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [showArtifactsDrawer, setShowArtifactsDrawer] = useState(false);
@@ -127,17 +128,10 @@ export default function Home() {
     setHasUploadedFile(true);
     setCurrentFileId(result.fileId);
 
-    // Add system message about file upload
-    const systemMessage: ChatMessage = {
-      id: `system_${Date.now()}`,
-      role: 'system',
-      content: `📁 File uploaded: ${result.filename} (${result.size} bytes, ${result.rowCount} rows)`,
-      timestamp: new Date(),
-    };
-
-    addMessage(systemMessage);
+    // System message suppressed - file upload status no longer shown in chat
 
     // Automatically start profiling to create OpenAI thread
+    setIsProfiling(true);
     try {
       const profileResponse = await fetch('/api/analysis/profile', {
         method: 'POST',
@@ -183,15 +177,7 @@ export default function Home() {
         setSecurityExpanded(true);
       }
 
-      // Add a message about starting profiling
-      const profilingMessage: ChatMessage = {
-        id: `system_${Date.now()}`,
-        role: 'system',
-        content: '🔍 Starting data profiling...',
-        timestamp: new Date(),
-      };
-
-      addMessage(profilingMessage);
+      // System message suppressed - no need to show profiling status to user
     } catch (error) {
       console.error('Failed to start profiling:', error);
 
@@ -203,6 +189,8 @@ export default function Home() {
       };
 
       addMessage(errorMessage);
+    } finally {
+      setIsProfiling(false);
     }
   };
 
@@ -440,7 +428,7 @@ export default function Home() {
                       onSendMessage={sendMessage}
                       onCancelRun={cancelRun}
                       disabled={!hasUploadedFile}
-                      isRunning={isRunning}
+                      isRunning={isRunning || isProfiling}
                       fileId={currentFileId}
                       isConnected={isConnected}
                       connectionError={connectionError}

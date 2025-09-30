@@ -188,6 +188,60 @@ export async function GET(
             return;
           }
 
+          // Filter out system/info/debug messages from chat window
+          // Only allow user-facing content to reach the UI
+          const systemMessageTypes = [
+            'system',
+            'info',
+            'debug',
+            'profiling',
+            'agent.info',
+            'agent.debug',
+            'agent.system',
+          ];
+
+          // Check if this is a system message by type
+          if (systemMessageTypes.includes(event.type.toLowerCase())) {
+            console.log(
+              `[SUPPRESSED] System message filtered from chat: ${event.type}`
+            );
+            return; // Don't send system messages to chat
+          }
+
+          // Check if this is a message event with system-like content
+          if (
+            event.type === 'message.delta' ||
+            event.type === 'message.completed'
+          ) {
+            const content = event.data?.content || event.data?.delta || '';
+            const systemPhrases = [
+              'Start data profiling',
+              'Starting data profiling',
+              'Data profiling completed',
+              'Processing query',
+              'Semantic processing',
+              'Query planning',
+              'Executing semantic',
+              'Starting analysis',
+              'Analysis completed',
+              'Sample data loaded:',
+              'File uploaded:',
+              'Queued (position',
+            ];
+
+            // Filter out messages that start with system-like phrases
+            if (
+              systemPhrases.some(phrase =>
+                content.toLowerCase().startsWith(phrase.toLowerCase())
+              )
+            ) {
+              console.log(
+                `[SUPPRESSED] System-like message filtered from chat: "${content.substring(0, 50)}..."`
+              );
+              return; // Don't send system-like messages to chat
+            }
+          }
+
           const data = JSON.stringify(event);
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
         } catch (error) {

@@ -278,37 +278,12 @@ export function useChat({
             );
             // Add queue position message if available
             if (streamEvent.data.queuePosition) {
-              messageCounterRef.current += 1;
-              const queueMessage: ChatMessage = {
-                id: `queue_${Date.now()}_${messageCounterRef.current}`,
-                role: 'system',
-                content: `⏳ Queued (position ${streamEvent.data.queuePosition})`,
-                timestamp: new Date(),
-              };
-
-              setMessages(prev => {
-                // Check for duplicate by ID or similar content
-                const isDuplicate = prev.some(
-                  msg =>
-                    msg.id === queueMessage.id ||
-                    (msg.role === queueMessage.role &&
-                      msg.content === queueMessage.content &&
-                      Math.abs(
-                        msg.timestamp.getTime() -
-                          queueMessage.timestamp.getTime()
-                      ) < 1000)
-                );
-
-                if (isDuplicate) {
-                  console.log(
-                    '[useChat] Preventing duplicate message:',
-                    queueMessage.id
-                  );
-                  return prev;
-                }
-
-                return [...prev, queueMessage];
-              });
+              // Queue message suppressed from chat - status shown in header instead
+              // Update queue status for header display only
+              onQueueUpdate?.(
+                streamEvent.data.queuePosition,
+                streamEvent.data.estimatedWaitTime
+              );
             }
             break;
 
@@ -589,7 +564,7 @@ export function useChat({
       }
       isConnectingRef.current = false;
     };
-  }, [threadId]); // Depend on threadId but exit early for invalid values
+  }, [threadId, onQueueUpdate]); // Depend on threadId but exit early for invalid values
 
   // Send message
   const sendMessage = useCallback(

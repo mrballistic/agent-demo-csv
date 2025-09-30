@@ -435,10 +435,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           profile: null,
         });
 
-        // Post system message
-        const sizeKB = Math.round(file.size / 1024);
-        const systemMessage = `Sample data loaded: ${datasetName} (${sizeKB}KB, ${result.rowCount} rows, ${result.profileHints.columnCount} columns)`;
-        onSystemMessage(systemMessage);
+        // System message suppressed - sample data loading status no longer shown in chat
 
         // Announce success to screen readers
         announceToScreenReader(
@@ -500,7 +497,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         );
       }
     },
-    [isDisabled, validateFile, onFileUploaded, onSystemMessage, setExpanded]
+    [isDisabled, validateFile, onFileUploaded, setExpanded]
   );
 
   const sampleDatasets = [

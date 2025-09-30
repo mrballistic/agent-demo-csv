@@ -105,7 +105,25 @@ export class ConversationAgent extends BaseAgent<
   private readonly LOW_CONFIDENCE_THRESHOLD = 0.3;
 
   // Context storage (in production, would use Redis or similar)
+
   private contextStore = new Map<string, ConversationContext>();
+
+  // Suppress system/info/debug messages from chat window
+  protected info(message: string, meta?: any) {
+    // Only log to server console, not to chat output
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.info(`[ConversationAgent] ${message}`, meta || '');
+    }
+  }
+
+  protected warn(message: string, meta?: any) {
+    // Only log to server console, not to chat output
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn(`[ConversationAgent] ${message}`, meta || '');
+    }
+  }
 
   constructor() {
     super();
@@ -120,6 +138,18 @@ export class ConversationAgent extends BaseAgent<
     context: AgentExecutionContext
   ): Promise<ConversationOutput> {
     const startTime = Date.now();
+
+    if (
+      !input.query ||
+      typeof input.query !== 'string' ||
+      input.query.trim().length === 0
+    ) {
+      this.warn('ConversationAgent received an undefined or empty query', {
+        input,
+      });
+      throw new Error('Query is required for conversation processing.');
+    }
+
     this.info('Processing conversation request', {
       sessionId: input.sessionId,
       query: input.query.substring(0, 100) + '...',
@@ -410,32 +440,38 @@ export class ConversationAgent extends BaseAgent<
     context: ConversationContext,
     execContext: AgentExecutionContext
   ): Promise<ConversationOutput> {
-    this.info('Processing LLM-only query');
+    this.info('Processing LLM-only query', {
+      query: input.query?.substring(0, 100) + '...',
+      hasFileId: !!input.fileId,
+      hasCsvContent: !!context.csvContent,
+    });
 
     try {
       // Stream analysis using ConversationManager
       let accumulatedResponse = '';
       let structuredOutput: any = null;
 
-      const stream =
-        input.fileId && context.csvContent
-          ? conversationManager.streamAnalysis(
-              input.sessionId,
-              input.query,
-              context.csvContent
-            )
-          : conversationManager.streamConversation(
-              input.sessionId,
-              input.query,
-              input.fileId
-            );
+      // For ConversationAgent, we should use streamConversation for follow-up questions
+      // streamAnalysis is only for initial CSV analysis, not for conversation flow
+      const stream = conversationManager.streamConversation(
+        input.sessionId,
+        input.query,
+        input.fileId
+      );
 
       for await (const chunk of stream) {
         if (chunk.type === 'content') {
           accumulatedResponse += chunk.data.delta || '';
         } else if (chunk.type === 'structured_output') {
           structuredOutput = chunk.data;
-          accumulatedResponse = structuredOutput.insight || accumulatedResponse;
+          // Only overwrite if the insight is defined and non-empty
+          if (
+            structuredOutput.insight &&
+            typeof structuredOutput.insight === 'string' &&
+            structuredOutput.insight.trim().length > 0
+          ) {
+            accumulatedResponse = structuredOutput.insight;
+          }
         } else if (chunk.type === 'error') {
           throw new Error(chunk.data.error);
         }
@@ -446,8 +482,14 @@ export class ConversationAgent extends BaseAgent<
         ? await this.extractInsightsFromStructuredOutput(structuredOutput)
         : [];
 
+      // Defensive: never return undefined or empty response
+      const finalResponse =
+        accumulatedResponse && accumulatedResponse.trim().length > 0
+          ? accumulatedResponse.trim()
+          : 'I analyzed your data, but could not generate a detailed summary. Please try rephrasing your question or ask for a specific insight.';
+
       return {
-        response: accumulatedResponse,
+        response: finalResponse,
         agentPath: [AgentType.CONVERSATION],
         confidence: 0.8, // LLM responses have consistent confidence
         usedSemanticLayer: false,
