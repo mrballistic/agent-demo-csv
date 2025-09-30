@@ -4,9 +4,18 @@
 import { BaseAgent } from './base';
 import {
   AgentType,
-  DataProfile,
   AgentExecutionContext,
+  AgentResult,
+  DataProfile,
+  FileMetadata,
   ColumnProfile,
+  SecurityProfile,
+  PIIColumn,
+  DataInsights,
+  QualityMetrics,
+  PrecomputedAggregations,
+  DataIndexes,
+  SchemaProfile,
 } from './types';
 import { StreamingCSVParser } from './utils/csv-parser';
 import {
@@ -15,6 +24,7 @@ import {
   calculateDateTimeStats,
   calculateTextStats,
 } from './utils/statistics';
+import { SecurityAgent, SecurityAgentInput } from './security-agent';
 
 export interface ProfilingInput {
   buffer: Buffer;
@@ -32,12 +42,14 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
   readonly version = '1.0.0';
 
   private csvParser: StreamingCSVParser;
+  private securityAgent: SecurityAgent;
 
   constructor() {
     super();
     this.csvParser = new StreamingCSVParser({
       maxSampleSize: 10000, // Sample size for analysis
     });
+    this.securityAgent = new SecurityAgent();
   }
 
   /**
@@ -92,8 +104,19 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
     // Calculate overall quality metrics
     const qualityMetrics = this.calculateOverallQuality(columnProfiles);
 
-    // Generate data insights
-    const insights = this.generateInsights(columnProfiles, parseResult);
+    // Perform security analysis
+    const securityProfile = await this.performSecurityAnalysis(
+      parseResult.headers,
+      parseResult.rows,
+      context
+    );
+
+    // Generate data insights (including security insights)
+    const insights = this.generateInsights(
+      columnProfiles,
+      parseResult,
+      securityProfile
+    );
 
     // Create precomputed aggregations
     const aggregations = this.createAggregations(
@@ -128,13 +151,7 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
 
       quality: qualityMetrics,
 
-      security: {
-        piiColumns: [],
-        riskLevel: 'low',
-        recommendations: [],
-        complianceFlags: [],
-        hasRedaction: false,
-      },
+      security: securityProfile,
 
       insights,
 
@@ -368,9 +385,141 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
   }
 
   /**
+   * Perform security analysis using SecurityAgent
+   */
+  private async performSecurityAnalysis(
+    headers: string[],
+    rows: any[],
+    context: AgentExecutionContext
+  ): Promise<SecurityProfile> {
+    try {
+      this.info('Performing security analysis for PII detection');
+
+      // Prepare data for security analysis - sample values for each column
+      const data: Record<string, string[]> = {};
+      headers.forEach(header => {
+        // Get sample values for PII analysis (limit to 1000 samples for performance)
+        const columnValues = rows
+          .map(row => String(row[header] || ''))
+          .filter(val => val.trim() !== '')
+          .slice(0, 1000);
+
+        data[header] = columnValues;
+      });
+
+      // Prepare security analysis input
+      const securityInput: SecurityAgentInput = {
+        data,
+        sessionId: context.requestId,
+        processingPurpose: 'data_profiling',
+        userConsent: true, // Assume consent for profiling
+        options: {
+          enableRedaction: false, // Don't redact during profiling
+          complianceCheck: true,
+          auditLogging: true,
+        },
+      };
+
+      // Execute security analysis
+      const securityResult = await this.securityAgent.execute(
+        securityInput,
+        context
+      );
+
+      if (!securityResult.success || !securityResult.data) {
+        this.warn('Security analysis failed, using default security profile');
+        return {
+          piiColumns: [],
+          riskLevel: 'low',
+          recommendations: [],
+          complianceFlags: [],
+          hasRedaction: false,
+        };
+      }
+
+      // Convert security analysis result to SecurityProfile format
+      const analysis = securityResult.data;
+      const piiColumns = Array.from(analysis.piiDetections.entries()).map(
+        ([columnName, detection]) => ({
+          name: columnName,
+          type: this.mapPIITypeToString(detection.type) as PIIColumn['type'],
+          confidence: detection.confidence,
+          detectionMethod: 'pattern' as const, // Simplified detection method
+          sampleMatches: detection.sampleValues.slice(0, 3), // Use sampleValues
+          recommendations: [
+            `Consider ${detection.type} redaction for ${columnName}`,
+          ],
+          isRedacted: false,
+        })
+      );
+
+      const securityProfile: SecurityProfile = {
+        piiColumns,
+        riskLevel: analysis.riskAssessment.overallRisk,
+        recommendations: analysis.riskAssessment.recommendations.map(rec => ({
+          type: 'redaction' as const,
+          priority: 'medium' as const,
+          description: rec,
+          implementation: 'Use data redaction before sharing or analysis',
+        })),
+        complianceFlags: analysis.complianceAssessments.map(assessment => ({
+          regulation: assessment.regulation,
+          requirement:
+            assessment.requirements[0]?.description || 'Data protection',
+          status: assessment.requirements.some(req => !req.met)
+            ? ('non_compliant' as const)
+            : ('compliant' as const),
+          action_required:
+            assessment.recommendations[0] || 'No action required',
+        })),
+        hasRedaction: false,
+      };
+
+      this.info(
+        `Security analysis complete: ${piiColumns.length} PII columns detected, risk level: ${analysis.riskAssessment.overallRisk}`
+      );
+
+      return securityProfile;
+    } catch (error) {
+      this.warn(
+        `Security analysis failed: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+      return {
+        piiColumns: [],
+        riskLevel: 'low',
+        recommendations: [],
+        complianceFlags: [],
+        hasRedaction: false,
+      };
+    }
+  }
+
+  /**
+   * Map PII type enum to string format expected by SecurityProfile
+   */
+  private mapPIITypeToString(piiType: any): string {
+    const typeMap: Record<string, string> = {
+      EMAIL: 'email',
+      PHONE: 'phone',
+      SSN: 'ssn',
+      CREDIT_CARD: 'credit_card',
+      IP_ADDRESS: 'ip_address',
+      NAME: 'name',
+      ADDRESS: 'address',
+    };
+    return typeMap[piiType] || 'other';
+  }
+
+  /**
    * Generate data insights
    */
-  private generateInsights(columns: ColumnProfile[], parseResult: any) {
+  private generateInsights(
+    columns: ColumnProfile[],
+    parseResult: any,
+    securityProfile: SecurityProfile
+  ) {
     const insights = {
       keyFindings: [] as string[],
       trends: [] as any[],
@@ -406,6 +555,27 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
       );
     }
 
+    // Security insights
+    if (securityProfile.piiColumns.length > 0) {
+      insights.keyFindings.push(
+        `⚠️ Detected ${securityProfile.piiColumns.length} columns with PII data`
+      );
+
+      // Add specific PII types found
+      const piiTypes = [
+        ...new Set(securityProfile.piiColumns.map(col => col.type)),
+      ];
+      if (piiTypes.length > 0) {
+        insights.keyFindings.push(`PII types detected: ${piiTypes.join(', ')}`);
+      }
+    }
+
+    if (securityProfile.riskLevel !== 'low') {
+      insights.keyFindings.push(
+        `🔒 Data security risk level: ${securityProfile.riskLevel}`
+      );
+    }
+
     // Suggested queries
     if (numericColumns > 0) {
       const numericCol = columns.find(c => c.type === 'numeric')?.name;
@@ -423,6 +593,18 @@ export class DataProfilingAgent extends BaseAgent<ProfilingInput, DataProfile> {
         insights.suggestedQueries.push(`Break down the data by ${catCol}`);
       }
     }
+
+    // Add security recommendations
+    securityProfile.recommendations.forEach(rec => {
+      insights.recommendations.push({
+        type: 'data_cleaning' as const,
+        title: `Security: ${rec.type}`,
+        description: rec.description,
+        priority:
+          rec.priority === 'high' ? 10 : rec.priority === 'medium' ? 5 : 1,
+        estimatedValue: rec.priority === 'high' ? 'high' : 'medium',
+      });
+    });
 
     return insights;
   }
