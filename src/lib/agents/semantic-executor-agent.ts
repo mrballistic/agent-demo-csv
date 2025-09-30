@@ -38,6 +38,8 @@ export interface SemanticExecutorResult {
     }>;
     aggregations?: Record<string, number>;
   };
+  requiresLLMProcessing?: boolean;
+  llmFallbackReason?: string | undefined;
 }
 
 /**
@@ -88,6 +90,8 @@ export class SemanticExecutorAgent extends BaseAgent<
     let currentData = [...input.profile.sampleData];
     let stepsExecuted = 0;
     const cacheUsed = false; // TODO: Implement caching
+    let requiresLLMProcessing = false;
+    let llmFallbackReason: string | undefined;
 
     try {
       // Execute plan steps in dependency order
@@ -99,6 +103,14 @@ export class SemanticExecutorAgent extends BaseAgent<
         console.log(
           `Executing step ${step.id}: ${step.type} - ${step.operation}`
         );
+
+        // Check for LLM analysis steps
+        if (step.type === 'transform' && step.operation === 'llm_analysis') {
+          requiresLLMProcessing = true;
+          llmFallbackReason = step.params?.fallbackReason || 'complex_query';
+          console.log(`LLM processing required: ${llmFallbackReason}`);
+        }
+
         currentData = await this.executeStep(
           step,
           currentData,
@@ -133,6 +145,8 @@ export class SemanticExecutorAgent extends BaseAgent<
           cacheUsed,
         },
         insights,
+        requiresLLMProcessing,
+        llmFallbackReason,
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
@@ -214,7 +228,7 @@ export class SemanticExecutorAgent extends BaseAgent<
       case 'limit':
         return this.executeLimitStep(step, data, profile);
       case 'transform':
-        return this.executeTransformStep(step, data, profile);
+        return await this.executeTransformStep(step, data, profile);
       default:
         console.warn(`Unknown step type: ${step.type}, skipping`);
         return data;
@@ -439,13 +453,41 @@ export class SemanticExecutorAgent extends BaseAgent<
   /**
    * Execute transform step - apply data transformations
    */
-  private executeTransformStep(
+  private async executeTransformStep(
     step: PlanStep,
     data: Record<string, any>[],
     profile: DataProfile
-  ): Record<string, any>[] {
-    // TODO: Implement data transformations based on step parameters
-    console.log(`Transform step not yet implemented: ${step.operation}`);
+  ): Promise<Record<string, any>[]> {
+    switch (step.operation) {
+      case 'llm_analysis':
+        return this.executeLLMAnalysisStep(step, data, profile);
+      default:
+        console.log(`Transform step not yet implemented: ${step.operation}`);
+        return data;
+    }
+  }
+
+  /**
+   * Execute LLM analysis step - fallback for complex queries
+   */
+  private async executeLLMAnalysisStep(
+    step: PlanStep,
+    data: Record<string, any>[],
+    profile: DataProfile
+  ): Promise<Record<string, any>[]> {
+    console.log('Executing LLM analysis fallback step');
+
+    // For the semantic layer, we should signal that this requires LLM processing
+    // rather than trying to execute it here. This maintains the separation of concerns.
+    // We'll return the data unchanged and let the calling agent know it needs LLM processing.
+
+    console.log(
+      'LLM analysis step detected - this query requires LLM processing'
+    );
+
+    // Add metadata to indicate this needs LLM processing
+    // We can't actually do LLM analysis in the semantic executor without breaking separation of concerns
+
     return data;
   }
 
