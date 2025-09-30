@@ -2,6 +2,68 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2025-09-30
+
+### 🎨 Chat Interface Modernization
+
+#### Modern Bubble Chat Design
+
+- **Redesigned**: Complete chat interface transformation to modern bubble-style messaging
+- **Added**: Left-aligned assistant messages with clean light background
+- **Added**: Right-aligned user messages in elegant dark grey bubbles (`grey.800`) with white text
+- **Enhanced**: Message containers with rounded corners, proper spacing, and 75% max-width for optimal readability
+- **Improved**: Professional contrast with enhanced styling for code blocks and markdown content in user messages
+
+#### Intelligent Message Filtering System
+
+- **Implemented**: Multi-layer system message suppression for cleaner chat experience
+- **Added**: ConversationAgent-level info/warn message suppression to reduce noise
+- **Enhanced**: Streaming API filtering with comprehensive message type detection
+- **Added**: UI-level filtering for system messages containing debug phrases:
+  - "Starting data profiling", "Data profiling completed"
+  - "Processing query", "Semantic processing", "Query planning"
+  - "Sample data loaded", "File uploaded", "Queued (position X)"
+- **Removed**: Source-level message generation from FileUploader and system components
+
+#### Profiling Animation Restoration
+
+- **Fixed**: Missing "AI is analyzing your data..." animation during initial CSV upload
+- **Added**: `isProfiling` state in main page component to track CSV analysis
+- **Enhanced**: ChatPane `isRunning` prop now includes profiling state (`isRunning || isProfiling`)
+- **Implemented**: Proper loading state management with animation appearing during file profiling
+- **Added**: Graceful cleanup with `finally` block ensuring animation disappears after profiling completion
+
+### 🧹 Code Quality Improvements
+
+#### Component Cleanup
+
+- **Removed**: Unused Chip component and related Material-UI imports
+- **Removed**: Helper functions `getMessageIcon()` and `getMessageColor()` no longer needed
+- **Removed**: Icon imports (Person, SmartToy, Info) replaced with modern bubble design
+- **Enhanced**: Cleaner component structure with reduced complexity and better performance
+
+#### Architecture Enhancements
+
+- **Improved**: State management for profiling lifecycle with proper start/stop tracking
+- **Enhanced**: Error handling in profiling process with loading state cleanup
+- **Added**: Comprehensive message filtering logic with configurable phrase detection
+- **Optimized**: Component rendering with reduced unnecessary re-renders
+
+### 🎯 User Experience Improvements
+
+- **Enhanced**: Clean, distraction-free chat interface without system message clutter
+- **Improved**: Visual hierarchy with clear distinction between user and assistant messages
+- **Added**: Consistent loading animations throughout the application lifecycle
+- **Enhanced**: Professional appearance matching modern messaging application standards
+
+### 📱 Responsive Design
+
+- **Optimized**: Bubble layout works seamlessly across all screen sizes
+- **Enhanced**: Touch-friendly message spacing and sizing
+- **Improved**: Mobile-first approach to message alignment and width constraints
+
+---
+
 ## [2.0.0] - 2025-09-26
 
 ### 🚀 Major Features Added
