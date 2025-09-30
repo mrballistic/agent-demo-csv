@@ -49,25 +49,42 @@ describe('Enhanced Security Warnings - Frontend Integration', () => {
 
     // Verify the structure matches our enhanced interface
     expect(mockSecurityProfile.piiColumns).toHaveLength(2);
-    expect(mockSecurityProfile.piiColumns[0].name).toBe('email');
-    expect(mockSecurityProfile.piiColumns[0].type).toBe('email');
-    expect(mockSecurityProfile.piiColumns[0].confidence).toBe(0.95);
-    expect(mockSecurityProfile.piiColumns[0].detectionMethod).toBe('pattern');
-    expect(mockSecurityProfile.piiColumns[0].sampleMatches).toEqual([
-      'user@example.com',
-    ]);
-    expect(mockSecurityProfile.piiColumns[0].recommendations).toEqual([
+
+    // Test first PII column (email)
+    const emailColumn = mockSecurityProfile.piiColumns[0];
+    expect(emailColumn).toBeDefined();
+    expect(emailColumn?.name).toBe('email');
+    expect(emailColumn?.type).toBe('email');
+    expect(emailColumn?.confidence).toBe(0.95);
+    expect(emailColumn?.detectionMethod).toBe('pattern');
+    expect(emailColumn?.sampleMatches).toEqual(['user@example.com']);
+    expect(emailColumn?.recommendations).toEqual([
       'Consider email redaction for email',
     ]);
-    expect(mockSecurityProfile.piiColumns[0].isRedacted).toBe(false);
+    expect(emailColumn?.isRedacted).toBe(false);
+
+    // Test second PII column (phone)
+    const phoneColumn = mockSecurityProfile.piiColumns[1];
+    expect(phoneColumn).toBeDefined();
+    expect(phoneColumn?.name).toBe('phone');
+    expect(phoneColumn?.type).toBe('phone');
 
     expect(mockSecurityProfile.riskLevel).toBe('medium');
+
+    // Test recommendations
     expect(mockSecurityProfile.recommendations).toHaveLength(1);
-    expect(mockSecurityProfile.recommendations[0].type).toBe('redaction');
-    expect(mockSecurityProfile.recommendations[0].priority).toBe('high');
+    const recommendation = mockSecurityProfile.recommendations[0];
+    expect(recommendation).toBeDefined();
+    expect(recommendation?.type).toBe('redaction');
+    expect(recommendation?.priority).toBe('high');
+
+    // Test compliance flags
     expect(mockSecurityProfile.complianceFlags).toHaveLength(1);
-    expect(mockSecurityProfile.complianceFlags[0].regulation).toBe('GDPR');
-    expect(mockSecurityProfile.complianceFlags[0].status).toBe('non_compliant');
+    const complianceFlag = mockSecurityProfile.complianceFlags[0];
+    expect(complianceFlag).toBeDefined();
+    expect(complianceFlag?.regulation).toBe('GDPR');
+    expect(complianceFlag?.status).toBe('non_compliant');
+
     expect(mockSecurityProfile.hasRedaction).toBe(false);
   });
 
@@ -157,6 +174,98 @@ describe('Enhanced Security Warnings - Frontend Integration', () => {
         expect(mockRecommendation.type).toBe(type);
         expect(mockRecommendation.priority).toBe(priority);
       });
+    });
+  });
+
+  it('should handle API security metadata response format', () => {
+    // Test the enhanced API response format that includes security metadata
+    const mockApiResponse = {
+      runId: 'run_123',
+      threadId: 'thread_456',
+      sessionId: 'session_789',
+      status: 'completed',
+      profile: {
+        // Profile data...
+      },
+      security: {
+        piiDetected: true,
+        riskLevel: 'medium' as const,
+        piiColumnsCount: 2,
+        complianceFlags: [
+          {
+            regulation: 'GDPR' as const,
+            requirement: 'Data protection',
+            status: 'non_compliant' as const,
+            action_required: 'Implement data protection measures',
+          },
+        ],
+        hasRedaction: false,
+        recommendations: [
+          {
+            type: 'redaction' as const,
+            priority: 'high' as const,
+            description: 'Implement data redaction for PII columns',
+            implementation: 'Use data redaction before sharing or analysis',
+          },
+        ],
+        piiColumns: [
+          {
+            name: 'customer_email',
+            type: 'email' as const,
+            confidence: 0.95,
+            detectionMethod: 'pattern' as const,
+            sampleMatches: ['user@example.com'],
+            recommendations: ['Consider email redaction'],
+            isRedacted: false,
+          },
+        ],
+      },
+    };
+
+    // Verify the API response structure
+    expect(mockApiResponse.status).toBe('completed');
+    expect(mockApiResponse.security).toBeDefined();
+    expect(mockApiResponse.security.piiDetected).toBe(true);
+    expect(mockApiResponse.security.riskLevel).toBe('medium');
+    expect(mockApiResponse.security.piiColumnsCount).toBe(2);
+    expect(mockApiResponse.security.hasRedaction).toBe(false);
+
+    // Verify security arrays
+    expect(mockApiResponse.security.complianceFlags).toHaveLength(1);
+    expect(mockApiResponse.security.recommendations).toHaveLength(1);
+    expect(mockApiResponse.security.piiColumns).toHaveLength(1);
+
+    // Verify PII column in API response
+    const piiColumn = mockApiResponse.security.piiColumns[0];
+    expect(piiColumn).toBeDefined();
+    expect(piiColumn?.name).toBe('customer_email');
+    expect(piiColumn?.type).toBe('email');
+    expect(piiColumn?.confidence).toBe(0.95);
+  });
+
+  it('should handle detection method types correctly', () => {
+    const detectionMethods = [
+      'pattern',
+      'column_name',
+      'ml_classifier',
+      'manual',
+    ] as const;
+
+    detectionMethods.forEach(method => {
+      const mockPiiColumn = {
+        name: 'test_column',
+        type: 'email' as const,
+        confidence: 0.9,
+        detectionMethod: method,
+        sampleMatches: ['sample@test.com'],
+        recommendations: ['Consider redaction'],
+        isRedacted: false,
+      };
+
+      expect(mockPiiColumn.detectionMethod).toBe(method);
+      expect(['pattern', 'column_name', 'ml_classifier', 'manual']).toContain(
+        mockPiiColumn.detectionMethod
+      );
     });
   });
 });

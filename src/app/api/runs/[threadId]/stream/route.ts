@@ -89,7 +89,15 @@ export async function GET(
   if (!threadId) {
     return NextResponse.json(
       { error: 'threadId is required' },
-      { status: 400 }
+      {
+        status: 400,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -113,7 +121,15 @@ export async function GET(
         threadId,
         sessionCount: sessionStore.getSessionCount(),
       },
-      { status: 404 }
+      {
+        status: 404,
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -129,7 +145,15 @@ export async function GET(
           'A streaming connection is already active for this thread. Please wait for it to complete.',
         threadId,
       },
-      { status: 409 } // Conflict
+      {
+        status: 409, // Conflict
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      }
     );
   }
 
@@ -354,6 +378,10 @@ export async function GET(
       Connection: 'keep-alive',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
     },
   });
 }
